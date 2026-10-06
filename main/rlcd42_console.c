@@ -15,6 +15,8 @@
 #include "voice.h"
 #include "muse_tts.h"
 #include "charm.h"
+#include "identity.h"
+#include "esp_system.h"
 #include "driver/usb_serial_jtag_vfs.h"
 
 #define CHAT_MAX (192 * 1024)
@@ -44,11 +46,34 @@ static void status(void) {
 }
 
 static void command(char *line, bool whole) {
+    if (!strcmp(line, "setup.status") && whole) {
+        char key[256] = {0};
+        bool tts = config_get_str("tts_key", key, sizeof(key)) && key[0];
+        memset(key, 0, sizeof(key));
+        printf("@setup {\"ok\":true,\"board\":\"waveshare-s3-rlcd42\",\"protocol\":1,\"sdk_configured\":%s,\"tts_configured\":%s}\n",
+               identity_sdk_token() ? "true" : "false", tts ? "true" : "false");
+        fflush(stdout); return;
+    }
+    if (whole && !strncmp(line, "sdk.setup=", 10)) {
+        size_t length = strlen(line);
+        cJSON *root = cJSON_Parse(line + 10);
+        char *token = (char *)cJSON_GetStringValue(cJSON_GetObjectItem(root, "token"));
+        bool ok = identity_sdk_token_save(token);
+        if (token) memset(token, 0, strlen(token));
+        cJSON_Delete(root); memset(line, 0, length);
+        printf("@setup {\"ok\":%s,\"restart_required\":%s}\n", ok ? "true" : "false", ok ? "true" : "false");
+        fflush(stdout); return;
+    }
+    if (!strcmp(line, "setup.restart") && whole) {
+        printf("@setup {\"ok\":true,\"restarting\":true}\n"); fflush(stdout);
+        vTaskDelay(pdMS_TO_TICKS(300)); esp_restart(); return;
+    }
     if (whole && !strncmp(line,"tts.setup=",10)) {
         cJSON *root=cJSON_Parse(line+10);
         const char *key=cJSON_GetStringValue(cJSON_GetObjectItem(root,"key"));
         bool ok=key && strlen(key)<256 && config_set_str("tts_key",key) && muse_tts_configure(key);
         printf("@tts {\"configured\":%s}\n",ok?"true":"false");fflush(stdout);
+        if (key) memset((char *)key,0,strlen(key));
         cJSON_Delete(root);memset(line,0,strlen(line));return;
     }
     if(whole && !strncmp(line,"charm.",6)) {

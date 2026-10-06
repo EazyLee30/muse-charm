@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Muse Charm · USB 配置</title>
+<style>
+:root{color-scheme:light;--ink:#20271f;--muted:#626b61;--green:#355b3e;--line:#dbe1d5;--paper:#f5f5ec}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.6}main{max-width:1040px;margin:auto;padding:44px 28px 60px}.brand{font-size:13px;font-weight:700;letter-spacing:.12em;display:flex;justify-content:space-between;gap:12px}.tag{font-weight:500;letter-spacing:0;color:var(--muted)}.hero{display:grid;grid-template-columns:1fr 170px;align-items:center;margin:35px 0 32px}h1{font-size:clamp(32px,5vw,50px);line-height:1.2;letter-spacing:-.035em;margin:0 0 16px}.lead{color:var(--muted);max-width:590px;margin:0}.pet{width:150px;animation:bob 3s ease-in-out infinite}@keyframes bob{50%{transform:translateY(-8px) rotate(3deg)}}.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:22px}.card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:0 10px 35px #2f422307}.eyebrow{font-size:12px;color:var(--green);font-weight:700;letter-spacing:.12em}h2{font-size:22px;margin:8px 0 18px}h3{font-size:15px;margin:20px 0 6px}p{margin:10px 0}label{display:block;font-size:14px;font-weight:650;margin:22px 0 8px}input{width:100%;font:inherit;border:1px solid #cad3c6;border-radius:12px;padding:12px 14px;background:#fafbf7;color:var(--ink)}input:focus{outline:3px solid #d6e4c8;border-color:var(--green)}.hint,small{font-size:12px;color:var(--muted)}button{border:0;border-radius:12px;padding:12px 18px;font:inherit;font-size:14px;font-weight:650;cursor:pointer;background:var(--green);color:white}button:hover{filter:brightness(1.08)}button:disabled{opacity:.42;cursor:not-allowed}.secondary{background:#edf1e8;color:var(--ink)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.status{padding:14px 16px;background:#eef2e8;border-radius:13px;font-size:14px;margin-top:20px;min-height:55px;overflow-wrap:anywhere}.status[data-error=true]{background:#fff0e9;color:#944022}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.chip{border:1px solid var(--line);border-radius:30px;font-size:12px;padding:5px 10px;color:var(--muted)}ol{padding-left:22px;margin:0}li{padding:7px 0;color:var(--muted)}li strong{color:var(--ink)}a{color:var(--green);text-underline-offset:3px}code{font-size:12px;background:#eef1e8;padding:2px 5px;border-radius:4px}.foot{margin-top:22px;font-size:12px;color:var(--muted)}details{border-top:1px solid var(--line);padding-top:16px;margin-top:22px}summary{cursor:pointer;font-size:14px;font-weight:650}.notice{border-left:3px solid #c7d3b9;padding-left:13px;font-size:13px;color:var(--muted)}@media(max-width:720px){main{padding:24px 18px}.grid{grid-template-columns:1fr}.hero{grid-template-columns:1fr 80px}.pet{width:80px}.card{padding:22px}.tag{display:none}}@media(prefers-reduced-motion:reduce){.pet{animation:none}}
+</style>
+</head>
+<body><main>
+<div class="brand"><span>MUSE CHARM</span><span class="tag">ESP32-S3-RLCD-4.2 · 本地 USB 配置 · v0.8.0</span></div>
+<div class="hero"><div><h1>把你的 Muse，<br>带到这块小屏幕。</h1><p class="lead">刷入统一固件，填上自己的凭证，然后到 Muse App 完成配对。无需编译，断电后也会记住设置。</p></div><svg class="pet" viewBox="0 0 160 160" aria-hidden="true"><path fill="#dce5cc" d="M31 48L22 28l28 7 14-19 17 17 27-12 3 25 26 6-12 22 12 20-24 9-5 28-25-11-19 18-13-25-27-1 7-25-17-13z"/><ellipse cx="81" cy="76" rx="34" ry="29" fill="#fff"/><ellipse cx="68" cy="72" rx="4" ry="7" fill="#20271f"/><ellipse cx="95" cy="72" rx="4" ry="7" fill="#20271f"/><path d="M73 86q9 10 17 0" fill="none" stroke="#20271f" stroke-width="3" stroke-linecap="round"/><path d="M43 119l-10 15m76-15 12 14" stroke="#355b3e" stroke-width="5" stroke-linecap="round"/></svg></div>
+<div class="grid"><section class="card"><div class="eyebrow">01 / CONNECT & CONFIGURE</div><h2>连接你的 Charm</h2><p class="hint">先按右侧说明刷入 v0.8.0 或更新版本，正常启动后再连接。请关闭串口监视器和其他刷机工具。</p>
+<div class="actions"><button id="connect" type="button">连接 USB 设备</button><button id="disconnect" class="secondary" type="button" disabled>断开</button></div>
+<div class="chips"><span class="chip" id="sdkState">Muse SDK · 未检测</span><span class="chip" id="ttsState">TTS · 未检测</span></div>
+<form id="credentials" autocomplete="off"><label for="sdk">Muse SDK token <small>必需</small></label><input id="sdk" type="password" placeholder="mgst_…" maxlength="63" autocomplete="off" spellcheck="false" autocapitalize="none" aria-describedby="sdkHint"><div class="hint" id="sdkHint">从 gadgets.muse.ai → Account → SDK tokens 获取。已配置时留空可保留。</div>
+<label for="tts">Token Plan TTS key <small>可选</small></label><input id="tts" type="password" placeholder="sk-…" maxlength="255" autocomplete="off" spellcheck="false" autocapitalize="none"><div class="hint">用于千问语音播报；留空保留现有设置。无需填写接口地址。</div>
+<div class="actions"><button id="save" type="submit" disabled>保存并重启</button><button id="restart" class="secondary" type="button" disabled>仅重启</button></div></form>
+<div id="message" class="status" role="status" aria-live="polite">等待连接。凭证不会显示在日志中。</div><p class="foot">凭证仅经 USB 保存到板子，不会发送到网站，也不保存在页面存储中。页面不读取已保存的凭证；状态仅说明是否配置。浏览器密码管理器如询问保存，请选择不保存。</p></section>
+<section class="card"><div class="eyebrow">02 / GET STARTED</div><h2>三步开始玩</h2><ol><li><strong>刷入懒人包固件。</strong><br>解压 Release ZIP，按包内 <code>开始使用.md</code> 安装 esptool 并刷写。首次安装用 factory 镜像；已有相同分区表用 app 镜像。这里只配置，不执行刷机。</li><li><strong>连接 USB，填写自己的 token。</strong><br>使用电脑 Chrome 或 Edge。点击左侧连接，选择 ESP32 的 USB Serial/JTAG 串口，保存后板子会重启。</li><li><strong>到 Muse App 添加设备。</strong><br>添加 <code>MuseGadget-Disp-XXXXXX</code>，提示时短按 BOOT，再选择 2.4GHz Wi-Fi。按住 KEY 说话，松开发送。</li></ol><p class="notice">保存成功只代表板子已保存凭证；格式校验不会验证账号权限。真正可用性由 Muse 配对和 TTS 服务确认。更换账号 token 后，请在 Muse App 重新添加设备。</p><h3>可以试着说</h3><p class="hint">“切换浅色模式，挥挥手。”<br>“把时区改成上海。”<br>“看看 SD 卡里有什么歌。”</p><details><summary>连接不上？</summary><p class="hint">Safari / Firefox 不支持此页面的 Web Serial。使用桌面 Chrome / Edge，关闭占用串口的软件，确认数据线支持数据传输。配置时板子应正常运行，不能停在 BOOT 下载模式。</p><p class="hint">若页面提示固件不支持，请先刷入 v0.8.0。若本地文件无法访问串口，在解压目录执行 <code>python3 -m http.server 8765 --bind 127.0.0.1</code>，再打开 <code>http://localhost:8765/setup/</code>。</p></details><p class="foot"><a href="https://github.com/EazyLee30/muse-charm/releases/latest" target="_blank" rel="noopener noreferrer">下载最新懒人包 ↗</a> · <a href="https://github.com/EazyLee30/muse-charm/blob/main/README.zh-CN.md" target="_blank" rel="noopener noreferrer">完整说明 ↗</a></p></section></div>
+</main>
+<script>
+'use strict';
+const el=id=>document.getElementById(id);
+let port=null, reader=null, readTask=null, pending=null, busy=false, ready=false, configured=false;
+const encoder=new TextEncoder();
+function message(text,error=false){el('message').textContent=text;el('message').dataset.error=String(error);}
+function controls(){el('connect').disabled=!!port||busy;el('disconnect').disabled=!port||busy;el('save').disabled=!ready||busy;el('restart').disabled=!ready||busy;el('sdk').disabled=busy;el('tts').disabled=busy;}
+function rejectPending(reason){if(pending){const p=pending;pending=null;clearTimeout(p.timer);p.reject(new Error(reason));}}
+function receive(line){
+ if(!pending||!line.startsWith(pending.prefix))return;
+ try{const result=JSON.parse(line.slice(pending.prefix.length));const p=pending;pending=null;clearTimeout(p.timer);p.resolve(result);}catch{/* Ignore incomplete or unrelated output. Never show device logs. */}
+}
+async function readLoop(){
+ const decoder=new TextDecoder();let buffer='';
+ reader=port.readable.getReader();
+ try{for(;;){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let i;while((i=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,i).trim();buffer=buffer.slice(i+1);receive(line);}if(buffer.length>16384)buffer='';}}
+ catch{if(ready)message('USB 连接已中断。重启后可重新连接检查状态。');}
+ finally{reader.releaseLock();reader=null;ready=false;rejectPending('USB 连接中断；保存状态请重新连接后检查。');controls();}
+}
+async function request(command,prefix){
+ if(!port?.writable||pending)throw new Error('串口未连接或仍有操作进行中。');
+ const response=new Promise((resolve,reject)=>{pending={prefix,resolve,reject,timer:setTimeout(()=>rejectPending('设备没有回应。请检查固件版本、USB 连接和串口占用。'),10000)};});
+ const writer=port.writable.getWriter();
+ try{await writer.write(encoder.encode('>'+command+'\n'));}catch{rejectPending('USB 写入失败，请重新连接。');}finally{writer.releaseLock();}
+ return response;
+}
+async function disconnect(){
+ ready=false;rejectPending('设备已断开。');
+ if(reader)await reader.cancel().catch(()=>{});
+ if(readTask)await readTask.catch(()=>{});
+ if(port)await port.close().catch(()=>{});
+ port=null;readTask=null;controls();
+}
+async function restart(){await request('setup.restart','@setup ');await disconnect();message('板子正在重启。现在到 Muse App 添加设备；也可以重新连接检查配置状态。');}
+el('connect').onclick=async()=>{
+ busy=true;controls();
+ try{
+  if(!('serial' in navigator)||!window.isSecureContext)throw new Error('请用桌面 Chrome / Edge 打开此页面，或通过说明中的 localhost 地址访问。');
+  port=await navigator.serial.requestPort({filters:[{usbVendorId:0x303a,usbProductId:0x1001}]});
+  await port.open({baudRate:115200});
+  await port.setSignals({dataTerminalReady:false,requestToSend:false});
+  readTask=readLoop();
+  const state=await request('setup.status','@setup ');
+  if(!state.ok||state.protocol!==1||state.board!=='waveshare-s3-rlcd42')throw new Error('设备不支持这套配置协议，请刷入 v0.8.0 或更新固件。');
+  configured=state.sdk_configured;ready=true;
+  el('sdkState').textContent='Muse SDK · '+(configured?'已配置':'待填写');el('ttsState').textContent='TTS · '+(state.tts_configured?'已配置':'可选');
+  message('设备已连接。填写凭证后保存；留空不会覆盖已有配置。');
+ }catch(error){await disconnect();message(error.name==='NotFoundError'?'未选择设备，可再次点击连接。':error.message,true);}
+ finally{busy=false;controls();}
+};
+el('disconnect').onclick=async()=>{await disconnect();message('已断开 USB。');};
+el('credentials').onsubmit=async event=>{
+ event.preventDefault();if(busy||!ready)return;
+ let sdk=el('sdk').value.trim(),tts=el('tts').value.trim();let sdkSaved=false,ttsSaved=false;
+ if(!sdk&&!configured){message('请填写自己的 Muse SDK token。',true);return;}
+ if(sdk&&!/^mgst_[A-Za-z0-9_-]{11,58}$/.test(sdk)){message('SDK token 格式不正确，应以 mgst_ 开头，总长度 16–63 个字符。',true);return;}
+ if(tts&&(!tts.startsWith('sk-')||tts.length>=256||/\s/.test(tts))){message('TTS key 格式不正确，应以 sk- 开头且不包含空白。',true);return;}
+ busy=true;controls();message('正在通过 USB 保存…');
+ try{
+  if(sdk){const result=await request('sdk.setup='+JSON.stringify({token:sdk}),'@setup ');if(!result.ok)throw new Error('SDK token 未能保存，请重试。');sdkSaved=true;configured=true;el('sdkState').textContent='Muse SDK · 已保存';}
+  if(tts){const result=await request('tts.setup='+JSON.stringify({key:tts}),'@tts ');if(!result.configured)throw new Error('TTS key 未能启用，请重新连接后检查状态。');ttsSaved=true;el('ttsState').textContent='TTS · 已保存';}
+  await restart();
+ }catch(error){message((sdkSaved?'SDK token 已保存。':'')+(ttsSaved?'TTS key 已保存。':'')+error.message+' 已保存的设置可通过“仅重启”应用。',true);}
+ finally{sdk='';tts='';el('sdk').value='';el('tts').value='';busy=false;controls();}
+};
+el('restart').onclick=async()=>{busy=true;controls();try{await restart();}catch(error){message(error.message,true);}finally{busy=false;controls();}};
+if(!('serial' in navigator))message('此浏览器不支持 USB 配置，请用桌面 Chrome 或 Edge 打开。',true);
+controls();
+</script>
+</body></html>

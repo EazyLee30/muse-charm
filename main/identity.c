@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "esp_mac.h"
+#include "config_store.h"
 #include "esp_log.h"
 
 static const char *TAG = "link.identity";
@@ -34,12 +35,16 @@ static const char *TAG = "link.identity";
 #define BLE_NAME_PREFIX CONFIG_HOMEHUB_BLE_NAME_PREFIX CONFIG_HOMEHUB_BLE_NAME_SUFFIX
 #define NODE_ID_PREFIX "homelink"
 
+static char s_sdk_token[64];
 static char s_node_id[32];
 static char s_ble_name[32];
 static char s_mac[18];
 static char s_device_id[48];
 
 void identity_init(void) {
+    // Load once at boot: pairing keeps this pointer for the session lifetime.
+    if (!config_get_str("sdk_token", s_sdk_token, sizeof(s_sdk_token)) ||
+        !identity_sdk_token_valid(s_sdk_token)) s_sdk_token[0] = 0;
     uint8_t mac[6] = {0};
     if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
         ESP_LOGW(TAG, "esp_read_mac failed; using zeros");
@@ -59,5 +64,19 @@ const char *identity_ble_name(void) { return s_ble_name; }
 const char *identity_mac(void) { return s_mac; }
 const char *identity_device_id(void) { return s_device_id; }
 const char *identity_sdk_token(void) {
-    return CONFIG_GADGET_SDK_TOKEN[0] ? CONFIG_GADGET_SDK_TOKEN : NULL;
+    return s_sdk_token[0] ? s_sdk_token :
+           CONFIG_GADGET_SDK_TOKEN[0] ? CONFIG_GADGET_SDK_TOKEN : NULL;
+}
+
+bool identity_sdk_token_valid(const char *token) {
+    if (!token || strncmp(token, "mgst_", 5) || strlen(token) < 16 || strlen(token) >= 64) return false;
+    for (const char *p = token + 5; *p; ++p)
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+              (*p >= '0' && *p <= '9') || *p == '_' || *p == '-')) return false;
+    return true;
+}
+
+bool identity_sdk_token_save(const char *token) {
+    // Restart applies the new value; never mutate a token read by BLE/tasks.
+    return identity_sdk_token_valid(token) && config_set_str("sdk_token", token);
 }

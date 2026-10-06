@@ -1,0 +1,36 @@
+# Muse Charm USB setup
+
+Standalone local Web Serial page for `waveshare-s3-rlcd42`, firmware v0.8.0+.
+Open `index.html` in desktop Chrome/Edge, or serve this directory on localhost.
+No external scripts, fetch requests, analytics, browser storage or token readback.
+
+The user must first flash the credential-free release firmware. This page does
+not flash devices. Close other serial clients before connecting.
+
+## USB protocol (115200 baud)
+
+Each command is UTF-8, prefixed by `>` and terminated by a newline. One request
+is active at a time. Replies are single-line JSON with the following prefixes:
+
+| Command | Reply |
+| --- | --- |
+| `setup.status` | `@setup {"ok":true,"board":"waveshare-s3-rlcd42","protocol":1,"sdk_configured":false,"tts_configured":false}` |
+| `sdk.setup={"token":"YOUR_MGST_TOKEN"}` | `@setup {"ok":true,"restart_required":true}` |
+| `tts.setup={"key":"YOUR_API_KEY"}` | `@tts {"configured":true}` |
+| `setup.restart` | `@setup {"ok":true,"restarting":true}` |
+
+SDK input must start with `mgst_`, contain 16–63 ASCII letters/digits/underscores/
+hyphens, and save successfully to NVS. Invalid inputs return `ok:false` without
+changing the current token. The SDK cache is loaded once at boot so a save does
+not alter credentials while pairing/network tasks hold its pointer. NVS takes
+precedence over the optional compile-time token. TTS is configured separately.
+
+Saving validates format and local persistence, not Muse/TTS service permissions.
+If SDK save succeeds but TTS setup fails, the page explains the partial result
+and allows an explicit restart. Inputs are cleared after submission. There is
+no automatic erase, account reset or Wi-Fi provisioning through this page.
+
+NVS is unencrypted in the current board configuration. Pairing reset preserves
+device-level SDK/TTS keys. Do not redistribute Flash/NVS dumps.
+
+Reference: [Chrome Web Serial](https://developer.chrome.com/docs/capabilities/serial).

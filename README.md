@@ -83,7 +83,23 @@ voice: longanhuan_v3.6
 output: MP3 / 16000 Hz
 ```
 
-Without a TTS key, local/network MP3 playback still works. Configure your own SDK token, API key and local signing key; none are distributed in this repository.
+Without a TTS key, local/network MP3 playback still works. Supply your own SDK token and optional TTS key through USB setup. Only source builds require a local signing key; private credentials and signing keys are not distributed.
+
+## 🚀 No-build setup package
+
+![USB configuration page](docs/charm-setup.png)
+
+Download `muse-charm-v0.8.0-setup.zip` from the [latest Release](https://github.com/EazyLee30/muse-charm/releases/latest). Follow `开始使用.md` to flash the credential-free firmware, then open `setup/index.html` in desktop **Chrome/Edge**.
+
+1. Connect the ESP32 USB Serial/JTAG port.
+2. Enter your own Muse SDK token from gadgets.muse.ai → Account → SDK tokens; optionally enter a Token Plan TTS key.
+3. Save and restart, then pair in the Muse App and select 2.4GHz Wi-Fi.
+
+Credentials persist in device NVS. Runtime SDK tokens override the optional compile-time token. The page reports configured/not configured without reading back credentials, making network requests, or writing browser storage. Leave configured fields blank to preserve them. Format validation does not verify service authorization.
+
+If local-file serial access is unavailable, run `python3 -m http.server 8765 --bind 127.0.0.1` in the extracted folder and open `http://localhost:8765/setup/`. Safari/Firefox are unsupported. Close other serial tools and boot normally before configuring. Flashing uses Python + esptool; ESP-IDF and compilation are unnecessary.
+
+No personal credentials ship in the package. NVS is currently unencrypted: do not publish Flash/NVS dumps. After changing account tokens, restart and re-add the device in Muse. Pairing reset preserves device-level SDK/TTS keys.
 
 ## Build and install
 
@@ -93,7 +109,7 @@ cd muse-charm
 . "$IDF_PATH/export.sh"  # ESP-IDF v6.0.1
 espsecure generate-signing-key --version 2 dev_signing_key.pem
 tools/board.sh waveshare-s3-rlcd42 menuconfig
-# Set Gadget SDK Token and the local signing-key path
+# Set local signing-key path; SDK token may stay empty for USB setup
 tools/board.sh waveshare-s3-rlcd42 build
 ```
 
@@ -154,3 +170,5 @@ Gamepad testing is deferred; boot does not automatically scan. After Muse pairin
 Hardware validation uses ESP-IDF 6.0.1, ESP32-S3 v0.2, 16MB flash / 8MB PSRAM. App size is about 1.75MiB, with about 12% free in its 2MiB partition. Based on the Meta Muse Gadget SDK under [Apache 2.0](LICENSE), with upstream avatar/font licenses and [Waveshare reference examples](https://github.com/waveshareteam/ESP32-S3-RLCD-4.2).
 
 Validation includes focused Charm/UI, audio ownership and pairing recovery host tests, plus hardware voice, music, four orientations and button feedback. The full upstream suite did not finish in its camera/tunnel harnesses on this Mac. A second full-UI board compiled in an isolated test copy after filling two existing upstream `WAITING_FOR_WIFI` switch cases; that workaround is not included in this board change.
+
+USB setup validation: runtime SDK save, invalid-format rejection, reboot persistence and restored Muse connectivity confirmed on the board. The actual page JavaScript passes split-response USB, partial-save and restart tests; Chrome rendering was checked.

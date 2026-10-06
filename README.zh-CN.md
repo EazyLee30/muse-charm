@@ -99,6 +99,22 @@ format: MP3 / 16000 Hz
 
 `compatible-mode/v1` 是兼容接口地址，当前 TTS 代码使用上面的原生接口。无 TTS key 时仍可播放 SD/网络 MP3；Muse 的语音播报需要配置 key。SDK token、API key、配对数据和签名私钥均由使用者自行配置，不随仓库提供。
 
+## 🚀 懒人包：不用编译，刷完填写 token
+
+![USB configuration page](docs/charm-setup.png)
+
+下载 [最新 Release](https://github.com/EazyLee30/muse-charm/releases/latest) 的 `muse-charm-v0.8.0-setup.zip`，解压后按 `开始使用.md` 刷入固件，再用电脑 **Chrome/Edge** 打开 `setup/index.html`：
+
+1. 点击“连接 USB 设备”，选择 ESP32 USB Serial/JTAG 串口。
+2. 填写自己的 Muse SDK token（gadgets.muse.ai → Account → SDK tokens）。TTS key 可选。
+3. 点击“保存并重启”，再到 Muse App 添加设备、确认 BOOT 和选择 Wi-Fi。
+
+SDK token / TTS key 保存到板子 NVS，断电不丢；运行时 SDK token 优先于编译配置。页面只读取是否配置，不读回凭证，不发起网络请求，不写入浏览器存储。页面不会验证服务权限，保存成功后仍需实际配对。已配置的字段留空可保留。
+
+若本地文件无法访问串口，在解压目录运行 `python3 -m http.server 8765 --bind 127.0.0.1`，访问 `http://localhost:8765/setup/`。Safari / Firefox 不支持这个配置页面。配置时必须正常启动，不能停在 BOOT 下载模式；关闭其他占用串口的软件。
+
+公开固件不含作者的 token、TTS key、Wi-Fi 或配对凭证。NVS 当前未加密，勿公开设备 Flash/NVS 转储。更换账号 token 后重启，并在 Muse App 重新添加设备。配置页面只负责配置；刷机需要 Python + esptool，具体命令在 ZIP 中，无需安装 ESP-IDF。
+
 ## 构建、刷机与配对
 
 ```bash
@@ -107,7 +123,7 @@ cd muse-charm
 . "$IDF_PATH/export.sh"  # ESP-IDF v6.0.1
 espsecure generate-signing-key --version 2 dev_signing_key.pem
 tools/board.sh waveshare-s3-rlcd42 menuconfig
-# 设置 Gadget SDK Token，以及本地签名私钥路径
+# 设置本地签名私钥路径；SDK token 可留空，刷入后用 USB 页面配置
 tools/board.sh waveshare-s3-rlcd42 build
 ```
 
@@ -188,3 +204,5 @@ python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 '你好，看看这台硬
 代码基于 Meta 官方 Muse Gadget SDK，遵循 [Apache 2.0](LICENSE)；头像与字体沿用各自上游授权。硬件引脚与传感器实现参考 [Waveshare 官方示例](https://github.com/waveshareteam/ESP32-S3-RLCD-4.2)。
 
 验证记录：已运行 Charm/UI、音频归属和配对恢复相关主机测试，并在实板确认语音、歌曲播放、四向布局与按键反馈。完整上游测试集在本机的 camera/tunnel 测试程序中未能跑完，不能视为全量通过。另一块完整 UI 板的兼容编译通过，但测试副本需补齐上游两个已有的 `WAITING_FOR_WIFI` switch 分支；该补丁未混入本板改动。
+
+USB 配置验证：已实板确认运行时保存 SDK token、拒绝错误格式、重启持久化及 Muse 连接恢复。页面 JavaScript 的分段 USB 响应、部分保存失败和重启流程测试通过，并检查了 Chrome 页面布局。

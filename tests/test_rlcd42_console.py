@@ -22,6 +22,12 @@ static const char *cJSON_GetStringValue(cJSON *o) {(void)o;return NULL;}
 static void cJSON_Delete(cJSON *o) {(void)o;}
 static char *cJSON_PrintUnformatted(cJSON *o) {(void)o;return NULL;}
 static bool config_set_str(const char *k,const char *v) {(void)k;(void)v;return false;}
+static const char *identity_sdk_token(void) {return NULL;}
+static bool identity_sdk_token_save(const char *s) {(void)s;return false;}
+static bool config_get_str(const char *k,char *v,size_t n) {(void)k;(void)v;(void)n;return false;}
+static void esp_restart(void) {}
+static void vTaskDelay(int t) {(void)t;}
+#define pdMS_TO_TICKS(x) (x)
 static bool muse_tts_configure(const char *k) {(void)k;return false;}
 static cJSON *charm_command(const char *c,cJSON *p) {(void)c;(void)p;return NULL;}
 #define CHAT_MAX 32

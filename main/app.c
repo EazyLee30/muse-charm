@@ -2525,7 +2525,7 @@ void app_run(void) {
     ESP_LOGI(TAG, "========================");
 
     if (!identity_sdk_token() || identity_sdk_token()[0] == '\0') {
-        ESP_LOGE(TAG, "SDK token missing! Set CONFIG_GADGET_SDK_TOKEN via idf.py menuconfig.");
+        ESP_LOGE(TAG, "SDK token missing. Open the USB setup page or configure a build-time token.");
         ESP_LOGE(TAG, "Get a token at gadgets.muse.ai > Account > SDK tokens.");
         ui_set_status("SDK TOKEN MISSING");
         led_status_set_state(LED_STATE_ERROR);
