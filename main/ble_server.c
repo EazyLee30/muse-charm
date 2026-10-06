@@ -410,12 +410,15 @@ static void dispatch_command_ex(const uint8_t *data, size_t len, bool decrypted)
         cJSON *u = cJSON_GetObjectItem(root, "username");
         cJSON *tt = cJSON_GetObjectItem(root, "token_type");
         const char *ota_url = optional_ota_url(root);
-        if (!cJSON_IsString(s) || !cJSON_IsString(p) || !cJSON_IsString(at)
-            || !s->valuestring || !p->valuestring || !at->valuestring
-            || !*s->valuestring || !*p->valuestring || !*at->valuestring
-            || !cJSON_IsString(rt) || !rt->valuestring || !*rt->valuestring
-            || !cJSON_IsString(tt) || !tt->valuestring
-            || strcmp(tt->valuestring, "device") != 0) {
+        // Log exactly which credential field failed, to debug App payload changes.
+        const char *missing = NULL;
+        if (!cJSON_IsString(s) || !s->valuestring || !*s->valuestring) missing = "ssid";
+        else if (!cJSON_IsString(p) || !p->valuestring || !*p->valuestring) missing = "password";
+        else if (!cJSON_IsString(at) || !at->valuestring || !*at->valuestring) missing = "access_token";
+        else if (!cJSON_IsString(rt) || !rt->valuestring || !*rt->valuestring) missing = "refresh_token";
+        else if (!cJSON_IsString(tt) || !tt->valuestring || strcmp(tt->valuestring, "device") != 0) missing = "token_type!=device";
+        if (missing) {
+            ESP_LOGW(TAG, "provision_v2 rejected: missing/invalid %s", missing);
             ble_server_send_status("error_missing_credentials");
         } else {
             provision_args_t *a = calloc(1, sizeof(*a));

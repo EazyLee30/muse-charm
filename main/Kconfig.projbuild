@@ -213,6 +213,15 @@ menu "ESP32 Device SDK"
             bool "Waveshare ESP32-S3-RLCD-4.2 ST7305 reflective mono LCD (status screen)"
             depends on IDF_TARGET_ESP32S3
 
+    config RLCD42_DARK_MODE
+        bool "RLCD dark mode (black background)"
+        depends on HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        default y
+        help
+            Black background with white drawing. The ST7305 reflective panel's
+            black is exceptionally deep, making dark mode strikingly beautiful.
+            Turn off for classic white paper background.
+
         config HOMEHUB_LED_BACKEND_MUSE
             bool "Muse display"
             depends on MUSE_ENABLED

@@ -2006,7 +2006,7 @@ static void notify_pairing_confirmed(uint32_t session_generation) {
     uint32_t generation = advance_confirm_generation_locked();
     setup_stage_set("confirmed");
     ui_set_status("pairing_confirmed");
-    led_status_set_state(LED_STATE_WIFI_CONNECTING);
+    led_status_set_state(LED_STATE_WAITING_FOR_WIFI);
     setup_window_lock_give();
     if (start_confirm_timeout(confirmed_idle_timeout_task, "pair_idle_to", generation,
                               session_generation) != pdPASS) {
@@ -2503,6 +2503,14 @@ void app_run(void) {
     // Only the hint gadgets.muse.ai displays; the full token is never logged.
     ESP_LOGI(TAG, "  SDK token:  %.12s", identity_sdk_token() ? identity_sdk_token() : "(none)");
     ESP_LOGI(TAG, "========================");
+
+    if (!identity_sdk_token() || identity_sdk_token()[0] == '\0') {
+        ESP_LOGE(TAG, "SDK token missing! Set CONFIG_GADGET_SDK_TOKEN via idf.py menuconfig.");
+        ESP_LOGE(TAG, "Get a token at gadgets.muse.ai > Account > SDK tokens.");
+        ui_set_status("SDK TOKEN MISSING");
+        led_status_set_state(LED_STATE_ERROR);
+        // Don't continue into a pairing flow that can never succeed.
+    }
 
     link_pairing_init(identity_node_id(), identity_device_id(), identity_mac(),
                       app_desc ? app_desc->version : "unknown", identity_sdk_token());

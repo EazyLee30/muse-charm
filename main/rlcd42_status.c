@@ -403,6 +403,7 @@ static const char *conn_label(led_state_t s) {
         case LED_STATE_BLE_ADVERTISING:          return "Pair in the Muse app";
         case LED_STATE_BLE_CONNECTED:            return "Pairing";
         case LED_STATE_PAIRING_CONFIRM_REQUIRED: return "Press BOOT to confirm";
+        case LED_STATE_WAITING_FOR_WIFI: return "Waiting for WiFi setup";
         case LED_STATE_WIFI_CONNECTING:          return "WiFi connecting";
         case LED_STATE_WIFI_CONNECTED:
         case LED_STATE_AUTH_OK:
@@ -475,6 +476,10 @@ static void render_volume(int percent) {
 // shows at panel (299 - y, x)), then write the full window.
 // Caller holds s_panel_lock and s_lock.
 static esp_err_t rlcd_flush(void) {
+#ifdef CONFIG_RLCD42_DARK_MODE
+    // Dark mode: invert framebuffer (drawn black-on-white -> white-on-black).
+    for (size_t i = 0; i < RLCD_FB_BYTES; i++) s_fb[i] ^= 0xFF;
+#endif
     for (int ru = 0; ru < RLCD_ROW_UNITS; ru++) {
         for (int cg = 0; cg < RLCD_COL_GROUPS; cg++) {
             uint8_t *out = s_tx + ((size_t)ru * RLCD_COL_GROUPS + cg) * 3;
