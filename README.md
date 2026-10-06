@@ -1,188 +1,156 @@
 <div align="center">
 
-![Muse Charm Banner](docs/banner.png)
+![Muse Charm](docs/banner.png)
 
-# 🖤 Muse Charm
+# Muse Charm
 
-### A Muse voice gadget for the Waveshare ESP32-S3-RLCD-4.2
+**A little Muse companion that listens, speaks, dances and controls its own hardware.**
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v6.0.1-red.svg)](https://github.com/espressif/esp-idf)
-[![Board](https://img.shields.io/badge/Board-ESP32--S3--RLCD--4.2-green.svg)](https://www.waveshare.com/esp32-s3-rlcd-4.2.htm)
-[![Display](https://img.shields.io/badge/Display-ST7305%20RLCD-black.svg)](https://www.waveshare.com/esp32-s3-rlcd-4.2.htm)
+[![ESP-IDF](https://img.shields.io/badge/ESP--IDF-6.0.1-e85d45)](https://github.com/espressif/esp-idf/releases/tag/v6.0.1)
+[![ESP32-S3](https://img.shields.io/badge/ESP32--S3-16MB%20Flash%20%2F%208MB%20PSRAM-345347)](https://www.waveshare.com/esp32-s3-rlcd-4.2.htm)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-[中文文档](README.zh-CN.md)
+[**中文：完整安装、玩法与接入说明**](README.zh-CN.md) · [Official Muse Gadget SDK](https://github.com/facebookincubator/muse-gadget-sdk) · [Board documentation](https://docs.waveshare.com/ESP32-S3-RLCD-4.2)
 
-Talk to Muse through a reflective monochrome LCD. No backlight, no glare — just e-paper-like calm.
+![Current firmware UI](docs/charm-ui.gif)
+
+*Preview rendered by the firmware's own drawing code. The physical screen is monochrome and reflective, with no backlight.*
 
 </div>
 
----
+## What works
 
-## ✨ Features
+| Feature | Implementation / validation |
+| :--- | :--- |
+| Push-to-talk | Hold KEY, speak, release. Official Muse account/VM conversation; microphone and speaker tested on hardware |
+| Spoken replies | Qwen TTS → MP3 → ES8311 speaker; audible playback confirmed. The upstream text/silence pacing is not a hosted TTS service |
+| Animated companion | Official pixel avatar, listening and speech, plus thinking stars, hearts, dance, wave, sleep, hop, peek and stretch reactions at about 5 FPS |
+| Paper / ink UI | White outlined avatar or dark background; clean header with compact time, connection and battery percentage; no quota or divider |
+| Reply bubble | Chinese text captions, paging during spoken replies; solid Noto Sans CJK Medium glyphs in a rounded bubble, fallback boxes for missing glyphs |
+| Rotation | Entire screen turns left/right in 90° steps; all four orientations, responsive layouts and persistence |
+| Hardware awareness | Muse discovers commands for theme, reactions, rotation, battery, SD, sensors, music and speech |
+| Battery | Calibrated GPIO4 ADC, voltage smoothing and **estimated** percentage; populated in `device.health` |
+| Sensors / clock | SHTC3 temperature/humidity and PCF85063 RTC; live readings verified |
+| SD card | FAT32 listing, small text reads and MP3 playback; no formatting or writes; local music confirmed audible |
+| Network music | Public HTTP(S) MP3 streaming, resampling and stop; network playback confirmed audible |
+| BLE HID | Lightweight NimBLE HOGP client, descriptor parser, notifications and remembered-peer reconnect; **Q36 connection/button compatibility still unverified** |
+| Desktop Muse | Same account and VM through the official encrypted link; USB text chat and local diagnostics included |
 
-- 🎙️ **Push-to-talk voice** — Hold KEY, speak, release. The official session transcribes and returns text replies over USB.
-- 🖥️ **ST7305 reflective LCD** — 300×400 monochrome, sunlight-readable, ultra-low power.
-- 🐾 **Animated Muse avatar** — Official pixel renderer at 5 FPS, with idle, listening, thinking and reply animations.
-- 🌗 **Dark / Light modes** — Pure black background or paper white, designed for reflective displays.
-- 🔊 **ES8311 + ES7210** — Speaker DAC and dual-microphone array via I²S.
-- 🔋 **Low power** — Reflective display sips power; no backlight to drain the battery.
-- 🔐 **Official Muse SDK** — Noise-protocol encrypted voice link via the official gadget SDK.
+The battery percentage is a 3.0–4.12V voltage estimate, not a fuel-gauge measurement. Charging state is unknown and charging can raise the estimate. Temperature is affected by board heat. Location is a user label, not GPS. The screen supports black and white only.
 
-## 🛠️ Hardware
+## Play with Muse
 
-| Component | Spec |
-|-----------|------|
-| **Board** | Waveshare ESP32-S3-RLCD-4.2 |
-| **SoC** | ESP32-S3-WROOM-1-N16R8 (16MB Flash, 8MB Octal PSRAM) |
-| **Display** | ST7305 4.2" reflective LCD, 300×400 mono |
-| **Audio DAC** | ES8311 (I²C `0x18`) |
-| **Microphone** | ES7210 dual-mic (I²C `0x40`/`0x42`) |
-| **Keys** | BOOT (GPIO0), KEY (GPIO18) |
-| **Flash mode** | **DIO** ⚠️ (QIO 80MHz fails to boot on this board's v0.2 chip revision) |
+Ask Muse to change the timezone to Shanghai, Los Angeles, New York or a fixed UTC offset. Supported regions use daylight-saving rules; fixed offsets do not. Settings persist.
 
-### Pinout
+Try asking Muse to switch to light mode, turn left 90°, dance, wave, report its battery, read room temperature/humidity, list SD songs or search for a playable network song.
 
-| Signal | GPIO |
-|--------|------|
-| LCD DC | 5 |
-| LCD SCLK | 11 |
-| LCD MOSI | 12 |
-| LCD CS | 40 |
-| LCD RST | 41 |
-| I²S MCLK | 16 |
-| I²S BCLK | 9 |
-| I²S LRCK | 45 |
-| I²S DOUT | 8 |
-| I²S DIN | 10 |
-| PA_CTRL | 46 |
-| KEY | 18 |
-| BOOT | 0 |
+| Command | Example |
+| :--- | :--- |
+| `charm.status` | Device, battery, connection, time, location label and orientation |
+| `charm.configure` | `{"mode":"light","rotate":"left","reaction":"dance","location":"desk","timezone":"Asia/Shanghai"}` |
+| `charm.sensors` | Temperature, relative humidity and RTC validity |
+| `charm.storage.list` | `{"path":"music"}`; omit path for root; up to 64 entries |
+| `charm.storage.read` | `{"path":"notes.txt"}`; up to 2,048 bytes |
+| `charm.music` | `{"url":"https://example.org/song.mp3"}`, `{"path":"music/song.mp3"}` or `{"action":"stop"}` |
+| `charm.speak` | `{"text":"Hello from Muse Charm!"}` |
+| `charm.controller` | `{"action":"pair"}` or `{"action":"disconnect"}` |
 
-## 🚀 Quick Start
+Commands are registered with the official `commands_v2` interface. For network requests, Muse needs web search on its VM and an accessible **direct MP3 URL**. Website links, DRM services, YouTube pages, HLS, AAC and FLAC are not supported inputs. No commercial music catalog or subscription login is bundled. A queued response means accepted, not downloaded successfully. Only one audio job runs at a time. Spoken music requests wait for the voice reply to finish; ending a text chat preserves music or speech started by a hardware command.
 
-### Prerequisites
+| Button | Action |
+| :--- | :--- |
+| KEY | Hold to record, release to send; press during music to stop it |
+| BOOT | Confirm initial pairing; once paired, single press toggles theme, double press rotates right; hold 5 seconds resets pairing/Wi-Fi |
+| PWR | Original hardware power control; not a programmable GPIO button |
 
-- [ESP-IDF v6.0.1](https://github.com/espressif/esp-idf/releases/tag/v6.0.1)
-- A [Muse SDK token](https://gadgets.muse.ai) (Account → SDK tokens, starts with `mgst_`)
+![Four orientations](docs/charm-orientations.png)
 
-### Build
+KEY/BOOT cues follow the physical button edge in every orientation, with a pressed rail and state feedback. PWR is hardware controlled and has no readable button GPIO.
+
+## Bring your own services
+
+- **Required:** Muse account/App, SDK token and usable VM; 2.4GHz Wi-Fi.
+- **For spoken replies:** Aliyun Token Plan API key with `qwen-audio-3.0-tts-plus` access. This supplies speech, not the Muse conversation model.
+- **For network song discovery:** web search available to Muse; the board plays the resulting audio URL.
+- **Optional:** FAT32 SD card and a compatible BLE HID gamepad. ESP32-S3 does not support Bluetooth Classic HID.
+
+Current TTS integration uses the [native Qwen HTTP API](https://help.aliyun.com/zh/model-studio/qwen-audio-tts-http-api), not `compatible-mode/v1`:
+
+```text
+https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer
+model: qwen-audio-3.0-tts-plus
+voice: longanhuan_v3.6
+output: MP3 / 16000 Hz
+```
+
+Without a TTS key, local/network MP3 playback still works. Configure your own SDK token, API key and local signing key; none are distributed in this repository.
+
+## Build and install
 
 ```bash
-# Set up ESP-IDF
-. $IDF_PATH/export.sh
-
-# First build: generate a local OTA signing key (never commit or share it)
+git clone https://github.com/EazyLee30/muse-charm.git
+cd muse-charm
+. "$IDF_PATH/export.sh"  # ESP-IDF v6.0.1
 espsecure generate-signing-key --version 2 dev_signing_key.pem
-
-# Set your SDK token (NEVER commit this!)
 tools/board.sh waveshare-s3-rlcd42 menuconfig
-# → Gadget SDK Token → paste your mgst_ token
-
-# Build
+# Set Gadget SDK Token and the local signing-key path
 tools/board.sh waveshare-s3-rlcd42 build
 ```
 
-### Flash
+For a fresh board, install bootloader, partition table and app with `tools/board.sh waveshare-s3-rlcd42 flash PORT`. If automatic USB reset fails, hold BOOT, tap RESET, then release BOOT. Use **DIO 80MHz**.
 
-> ⚠️ **Must use DIO flash mode.** QIO bricks the boot on this board's chip revision.
-
-```bash
-# Find your serial port
-ls /dev/cu.usbmodem*   # macOS
-ls /dev/ttyACM*        # Linux
-
-# Flash the merged factory image at 0x0
-python -m esptool --chip esp32s3 -p <PORT> -b 460800 \
-  --before default-reset --after hard-reset \
-  write-flash --flash-mode dio 0x0 muse-voice-rlcd42-factory.bin
-```
-
-Or build the factory image yourself:
+For a board already running this project's matching partition layout, update only the application to preserve Wi-Fi and pairing:
 
 ```bash
-cd build-waveshare-s3-rlcd42
-python -m esptool --chip esp32s3 merge-bin \
-  --flash-mode dio --flash-size 16MB \
-  -o muse-voice-rlcd42-factory.bin \
-  0x0 bootloader/bootloader.bin \
-  0x10000 partition_table/partition-table.bin \
-  0x17000 ota_data_initial.bin \
-  0x19000 phy_init_data.bin \
-  0x20000 muse-gadget.bin
+python -m esptool --chip esp32s3 --port /dev/cu.usbmodem1101 \
+  --before usb-reset --after hard-reset --baud 115200 --no-stub \
+  write-flash --flash-mode dio --flash-freq 80m --flash-size 16MB \
+  0x20000 build-waveshare-s3-rlcd42/muse-gadget.bin
 ```
 
-## 📱 Pairing
+Add `MuseGadget-Disp-XXXXXX` from the Muse App's device/developer-device screen, short-press BOOT when prompted, then choose Wi-Fi. The device restarts after provisioning. Desktop Muse should use the same account/VM. If the server explicitly revokes device credentials, re-add it in the App.
 
-1. Power on — the screen shows the pairing status.
-2. Open **Muse App** → Settings → Devices → Developer mode → Add Device.
-3. Select `MuseGadget-Disp-XXXXXX` from the list.
-4. When prompted, **short-press the BOOT button** to confirm.
-5. Choose your 2.4GHz Wi-Fi network (ESP32-S3 is 2.4GHz only).
-6. The gadget restarts after pairing. **Hold KEY** to talk; USB chat provides text replies.
+### Configure speech and use USB tools
 
-> 💡 **Factory reset:** Hold BOOT for 5 seconds to wipe Wi-Fi and pairing data.
-
-## 💻 Talk to your computer's Muse
-
-After phone provisioning succeeds, the gadget restarts to release BLE memory and connects to the paired account's Muse VM. Use the same account and VM to continue the conversation in desktop Muse.
+Install Python `pyserial`. Create an ignored private `.cache/tts.json` with `{"key":"YOUR_API_KEY"}`:
 
 ```bash
-python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 --status
-python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 "Hello, please reply briefly"
+chmod 600 .cache/tts.json
+python3 tools/charm.py tts-setup .cache/tts.json
+python3 tools/charm.py speak 'Hello from Muse Charm!'
+python3 tools/charm.py status
+python3 tools/charm.py configure --mode light --rotate left --reaction wave
+python3 tools/charm.py sensors
+python3 tools/charm.py list music
+python3 tools/charm.py music 'music/song.mp3'
+python3 tools/charm.py music --stop
+python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 'Inspect this gadget and wave'
 ```
 
-USB text replies use the official SDK console protocol. The upstream session currently paces text with silence; spoken replies require a separate TTS integration. The reflective display shows the animated avatar and status, rather than full chat text. Keep personal SDK credentials and built firmware out of public repositories.
+Only one program may own the serial port. TTS setup persists the key in NVS without echoing it or exposing it to Muse commands; this development profile uses plaintext NVS. Endpoint/model/voice are configured in `components/muse/muse_tts.c`. Other providers need an adapter.
 
-## 🔊 Audio diagnostics
+For an audio hardware check, send `>audio.test` on the 115200-baud console. It plays fixed-volume 440/660Hz tones. KEY recordings log sample count, peak and RMS. Never publish private `sdkconfig`, signing keys, API keys or firmware binaries containing your SDK token.
 
-On the USB serial console at 115200 baud, send `>audio.test` followed by Enter to play one second of 440/660 Hz tones through the normal player, ES8311 and amplifier. This tests playback without a TTS service at a fixed 60% level and then restores the saved volume. `@audio {"queued":false}` means the voice hardware is not ready or is busy. After a KEY recording, logs report microphone sample count, peak and RMS amplitude. Speaker I²S failures are logged explicitly. The DAC volume uses the ES8311's 0.5 dB scale, with 100% capped at unity gain.
+## Q36 status — testing deferred
 
-## 🧠 How It Works
+The [manufacturer's Q36XDV manual](https://fccid.io/2A3VP-Q36/User-Manual/User-manual-7156117.pdf) describes X mode as `XBOX Wireless Controller`, fast blue flashing for pairing, steady blue when connected; D mode is `Q36 for Android`. Variant and mode must actually expose BLE HID to work here. A flashing LED or product name alone does not establish compatibility.
 
-```
-┌─────────┐   BLE    ┌──────────┐   Noise    ┌─────────┐
-│  Phone  │◄────────►│ ESP32-S3 │◄──────────►│ Muse VM │
-│ (Muse   │  GATT    │ (gadget) │  WebSocket │ (voice  │
-│  App)   │          │          │  + TLS     │  AI)    │
-└─────────┘          └──────────┘            └─────────┘
-```
+Gamepad testing is deferred; boot does not automatically scan. After Muse pairing, ask to pair a gamepad or run `python3 tools/charm.py pair`. The scan window is three minutes. The implementation remembers a successfully subscribed peer for reconnect when scanning is explicitly requested. Intended mapping: **A hearts, B theme, X dance, Y wave, D-pad movement**. This board scans BLE successfully, but Q36 pairing and button reports have not yet been verified. No emulator or second Bluetooth stack was imported.
 
-1. **Pairing** — Phone connects via BLE, confirms with physical button press.
-2. **Provisioning** — Wi-Fi credentials sent over encrypted BLE.
-3. **Voice link** — Device opens a Noise-encrypted WebSocket to Muse's VM.
-4. **Push-to-talk** — KEY down → record → KEY up → transcribe → Muse returns a text reply.
+## Hardware and source
 
-## 📁 Project Structure
+| Module | Pins / address |
+| :--- | :--- |
+| LCD | ST7305, native 300×400; landscape 400×300; MOSI12, SCLK11, DC5, CS40, RST41 |
+| Audio | ES8311 `0x18`, ES7210 `0x40`/`0x42`; I²C SDA13/SCL14 |
+| I²S / amplifier | MCLK16, BCLK9, LRCK45, DOUT8, DIN10, PA46 active high |
+| Battery | GPIO4 / ADC1_CH3, divider ×3 |
+| SDMMC | 1-bit CLK38, CMD21, D039 |
+| Sensors | SHTC3 `0x70`, PCF85063 `0x51`, shared I²C |
+| Buttons | BOOT0, KEY18, hardware PWR |
 
-```
-├── main/
-│   ├── rlcd42_status.c          # ST7305 reflective LCD driver + status UI
-│   ├── voice_board_waveshare_s3_rlcd42.c  # ES8311/ES7210 audio board driver
-│   ├── app.c                    # Main application logic
-│   ├── ble_server.c             # BLE GATT pairing server
-│   └── Kconfig.projbuild        # Board-specific config (incl. SDK token)
-├── devices/
-│   └── sdkconfig.waveshare-s3-rlcd42  # Board build configuration (DIO flash!)
-├── tools/
-│   └── board.sh                 # Board selection helper
-└── components/                  # Shared SDK components
-```
+`main/charm*` implements hardware commands, sensors, BLE HID and fonts. `main/rlcd42_status.c` and `avatar/muse_pixel.c` draw the UI. `main/voice*` and `components/muse/muse_tts.c` handle audio. `tools/preview_charm.py` renders the README preview; `tools/gen_charm_font.py` generates the 18px Noto Sans CJK SC Medium subset (see [font licensing](docs/OFL-NotoSansCJK.txt)). The generated glyphs are committed; regeneration needs Pillow and the official OTF in `.cache/fonts/NotoSansCJKsc-Medium.otf`.
 
-## ⚠️ Known Hardware Quirks
+Hardware validation uses ESP-IDF 6.0.1, ESP32-S3 v0.2, 16MB flash / 8MB PSRAM. App size is about 1.75MiB, with about 12% free in its 2MiB partition. Based on the Meta Muse Gadget SDK under [Apache 2.0](LICENSE), with upstream avatar/font licenses and [Waveshare reference examples](https://github.com/waveshareteam/ESP32-S3-RLCD-4.2).
 
-- **QIO flash = boot loop.** This board's ESP32-S3 v0.2 chip revision cannot boot with QIO 80MHz flash (`rst:0x7 TG0WDT_SYS_RST`). Always use DIO mode for both build and flash.
-- **ES7210 I²C address** varies by batch: `0x40` or `0x42`. The driver probes both.
-
-## 📄 License
-
-Apache License 2.0 — see [LICENSE](LICENSE).
-
-Based on the [Muse Gadget SDK](https://github.com/facebookincubator/muse-gadget-sdk) (Apache-2.0).
-Original Jollybot character assets are **not** included (not covered by Apache-2.0).
-
----
-
-<div align="center">
-Made with 🖤 for reflective displays
-</div>
+Validation includes focused Charm/UI, audio ownership and pairing recovery host tests, plus hardware voice, music, four orientations and button feedback. The full upstream suite did not finish in its camera/tunnel harnesses on this Mac. A second full-UI board compiled in an isolated test copy after filling two existing upstream `WAITING_FOR_WIFI` switch cases; that workaround is not included in this board change.

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -36,6 +37,11 @@
 #include "voice_board.h"
 #include "voice_muse_chat.h"
 #include "voice_player.h"
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+#include "muse_tts.h"
+#include "charm.h"
+#include "minimp3.h"
+#endif
 
 static const char *TAG = "link.voice";
 
@@ -55,12 +61,17 @@ static const char *TAG = "link.voice";
 #define RELEASE_TAIL_MS     250
 #define REPLY_CHUNK         (VOICE_PLAYER_RATE / 50)   // 20 ms
 
-typedef enum { EVT_PRESS, EVT_RELEASE, EVT_SPEAKER_TEST } voice_evt_t;
+typedef enum { EVT_PRESS, EVT_RELEASE, EVT_SPEAKER_TEST, EVT_SAY, EVT_MUSIC } voice_evt_t;
 
 static QueueHandle_t s_events;
 static atomic_bool s_ready;
 static atomic_int s_audio_owner; // 0 idle, 1 voice turn, 2 speaker diagnostic
 static atomic_int s_volume;
+static atomic_bool s_media_stop;
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+static portMUX_TYPE s_music_lock=portMUX_INITIALIZER_UNLOCKED;
+static char s_pending_music[1024];
+#endif
 
 static int load_volume(void) {
     char buf[8];
@@ -152,7 +163,8 @@ static bool fail(const char *why) {
 // Play the reply as it arrives. Returns true if a new press interrupted it.
 static bool reply(void) {
     static int16_t pcm[REPLY_CHUNK];
-    char text[96];
+    char text[192];
+    int64_t caption_at=0;
     bool done = false;
     size_t played = 0;
     int64_t t0 = esp_timer_get_time();
@@ -171,6 +183,10 @@ static bool reply(void) {
                 led_status_set_voice(LED_VOICE_THINKING);
                 break;
             case MUSE_HATCH_EV_REPLY:
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+                atomic_store(&s_media_stop,false);
+                charm_ui_caption(text);
+#endif
                 if (!voice_player_started()) led_status_set_voice(LED_VOICE_BUFFERING);
                 break;
             case MUSE_HATCH_EV_DONE:
@@ -192,6 +208,11 @@ static bool reply(void) {
             break;
         }
         if (voice_player_started()) led_status_set_voice(LED_VOICE_SPEAKING);
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        if(esp_timer_get_time()-caption_at>500000 && muse_hatch_turn_caption(played,text,sizeof(text))) {
+            charm_ui_caption(text);caption_at=esp_timer_get_time();
+        }
+#endif
     }
     voice_player_end();
     while (!voice_player_wait(0)) {
@@ -200,6 +221,11 @@ static bool reply(void) {
             return true;
         }
         if (voice_player_started()) led_status_set_voice(LED_VOICE_SPEAKING);
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        if(esp_timer_get_time()-caption_at>500000 && muse_hatch_turn_caption(played,text,sizeof(text))) {
+            charm_ui_caption(text);caption_at=esp_timer_get_time();
+        }
+#endif
     }
     ESP_LOGI(TAG, "reply: %.1fs of speech, %.1fs total", (double)played / VOICE_PLAYER_RATE,
              (esp_timer_get_time() - t0) / 1e6);
@@ -209,6 +235,9 @@ static bool reply(void) {
 
 // Returns true if a new press interrupted the turn.
 static bool run_turn(void) {
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    portENTER_CRITICAL(&s_music_lock);s_pending_music[0]=0;portEXIT_CRITICAL(&s_music_lock);
+#endif
     voice_player_stop();
     led_status_set_level(0);
     led_status_set_voice(LED_VOICE_LISTENING);
@@ -231,6 +260,9 @@ static bool run_turn(void) {
 // button keeps its setup role otherwise.
 static bool on_press(bool pressed) {
     if (pressed) {
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        if(atomic_load(&s_audio_owner)==3) {voice_stop_music();return true;}
+#endif
         if (!atomic_load(&s_ready) || atomic_load(&s_audio_owner) == 2 || voice_board_muted()) return false;
         voice_hatch_refresh();
         if (!muse_hatch_ready()) return false;
@@ -280,6 +312,95 @@ bool voice_speaker_test(void) {
     return false;
 }
 
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+static void say_reply(bool music) {
+    uint8_t *mp3=heap_caps_malloc(32768,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    mp3dec_t *dec=heap_caps_malloc(sizeof(*dec),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    int16_t *pcm=heap_caps_malloc(MINIMP3_MAX_SAMPLES_PER_FRAME*sizeof(int16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    int16_t *resampled=heap_caps_malloc(4616*sizeof(int16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    uint32_t phase=0;int16_t previous=0;
+    if(!mp3 || !dec || !pcm || !resampled) goto finish;
+    mp3dec_init(dec);voice_player_begin();led_status_set_voice(LED_VOICE_BUFFERING);
+    size_t length=0,played=0;bool done=false;
+    int64_t deadline=esp_timer_get_time()+(music?1800000000LL:60000000);
+    while(esp_timer_get_time()<deadline && !atomic_load(&s_media_stop)) {
+        length+=muse_tts_read(mp3+length,32768-length,&done);
+        size_t offset=0;
+        while(length-offset>(done?0:2048)) {
+            mp3dec_frame_info_t info;
+            int samples=mp3dec_decode_frame(dec,mp3+offset,length-offset,pcm,&info);
+            if(!info.frame_bytes) {if(done) offset=length;break;}
+            offset+=info.frame_bytes;
+            if(samples) {
+                if(info.hz<8000 || info.hz>48000) goto stop;
+                if(info.channels==2) for(int i=0;i<samples;i++) pcm[i]=(pcm[2*i]+pcm[2*i+1])/2;
+                size_t n=0;uint32_t step=((uint64_t)info.hz<<16)/16000;
+                while((phase>>16)<(unsigned)samples) {
+                    unsigned i=phase>>16;int32_t a=i?pcm[i-1]:previous,b=pcm[i];
+                    resampled[n++]=a+(((int64_t)(b-a)*(phase&65535))>>16);phase+=step;
+                }
+                phase-=(uint32_t)samples<<16;previous=pcm[samples-1];
+                if(voice_player_write(resampled,n)!=ESP_OK) goto stop;
+                played+=n;led_status_set_voice(LED_VOICE_SPEAKING);
+            }
+        }
+        if(offset) {memmove(mp3,mp3+offset,length-offset);length-=offset;}
+        if(done && !length) break;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    voice_player_end();
+    if(!voice_player_wait(20000)) voice_player_stop();
+    ESP_LOGI(TAG,"%s played %u PCM samples",music?"music":"TTS",(unsigned)played);
+stop:
+    muse_tts_cancel();voice_player_stop();
+finish:
+    free(mp3);free(dec);free(pcm);free(resampled);led_status_set_voice(LED_VOICE_IDLE);
+    atomic_store(&s_audio_owner,0);
+}
+void voice_stop_music(void) {
+    portENTER_CRITICAL(&s_music_lock);s_pending_music[0]=0;portEXIT_CRITICAL(&s_music_lock);
+    if(atomic_load(&s_audio_owner)!=3) return;
+    atomic_store(&s_media_stop,true);muse_tts_cancel();voice_player_stop();
+}
+bool voice_play_music(const char *source) {
+    if(!atomic_load(&s_ready) || !source || strlen(source)>=sizeof(s_pending_music)
+       || (strncmp(source,"/sdcard/",8) && strncmp(source,"http://",7) && strncmp(source,"https://",8))) return false;
+    // A tool invoked by a spoken request must wait for Muse's reply to drain.
+    // It cannot claim the speaker while that same voice turn owns it.
+    portENTER_CRITICAL(&s_music_lock);
+    if(atomic_load(&s_audio_owner)==1) {
+        strcpy(s_pending_music,source);
+        portEXIT_CRITICAL(&s_music_lock);return true;
+    }
+    portEXIT_CRITICAL(&s_music_lock);
+    int expected=0;if(!atomic_compare_exchange_strong(&s_audio_owner,&expected,3)) return false;
+    atomic_store(&s_media_stop,false);
+    if(!muse_tts_media(source)) {atomic_store(&s_audio_owner,0);return false;}
+    voice_evt_t event=EVT_MUSIC;
+    if(xQueueSend(s_events,&event,0)==pdTRUE) return true;
+    muse_tts_cancel();atomic_store(&s_audio_owner,0);return false;
+}
+static void play_pending_music(void) {
+    char pending[1024];
+    portENTER_CRITICAL(&s_music_lock);
+    atomic_store(&s_audio_owner,0);
+    strcpy(pending,s_pending_music);s_pending_music[0]=0;
+    portEXIT_CRITICAL(&s_music_lock);
+    if(pending[0] && !voice_play_music(pending)) ESP_LOGW(TAG,"queued song could not start");
+}
+bool voice_say(const char *text) {
+    if(!atomic_load(&s_ready) || !muse_hatch_ready()) return false;
+    int expected=0;
+    if(!atomic_compare_exchange_strong(&s_audio_owner,&expected,2)) return false;
+    atomic_store(&s_media_stop,false);
+    charm_ui_caption(text);
+    if(!muse_tts_say(text)) {atomic_store(&s_audio_owner,0);return false;}
+    voice_evt_t event=EVT_SAY;
+    if(xQueueSend(s_events,&event,0)==pdTRUE) return true;
+    muse_tts_cancel();atomic_store(&s_audio_owner,0);return false;
+}
+#endif
+
 static void voice_task(void *arg) {
     if (voice_board_init() != ESP_OK || voice_player_init() != ESP_OK) {
         ESP_LOGE(TAG, "audio hardware unavailable; voice chat disabled");
@@ -296,11 +417,18 @@ static void voice_task(void *arg) {
     for (;;) {
         voice_evt_t event;
         if (xQueueReceive(s_events, &event, portMAX_DELAY) != pdTRUE) continue;
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        if(event==EVT_SAY || event==EVT_MUSIC) {say_reply(event==EVT_MUSIC);continue;}
+#endif
         if (event == EVT_SPEAKER_TEST) { speaker_test(); continue; }
         if (event != EVT_PRESS) continue;
         while (run_turn()) {
         }
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        play_pending_music();
+#else
         atomic_store(&s_audio_owner, 0);
+#endif
     }
 }
 
@@ -315,7 +443,13 @@ void voice_init(void) {
     muse_hatch_start();
     // The stack is in PSRAM, so the task must not touch flash (NVS): pairing
     // needs an 8 KB internal block for its TLS task.
-    if (xTaskCreateWithCaps(voice_task, "voice", 4096, NULL, 4, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
+    if (xTaskCreateWithCaps(voice_task, "voice",
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+                                32*1024, // minimp3 needs about 16 KB of scratch stack
+#else
+                                4096,
+#endif
+                                NULL, 4, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
         ESP_LOGE(TAG, "failed to start voice chat");
         return;
     }

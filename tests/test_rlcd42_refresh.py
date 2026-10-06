@@ -18,8 +18,10 @@ class RlcdRefreshTest(unittest.TestCase):
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#define RLCD_ROW_BYTES 50
-#define RLCD_FB_BYTES 15000
+#define RLCD_W ((s_rotation&1)?300:400)
+#define RLCD_H ((s_rotation&1)?400:300)
+#define RLCD_ROW_BYTES ((RLCD_W+7)/8)
+#define RLCD_FB_BYTES 15200
 #define RLCD_TX_BYTES 15000
 #define RLCD_ROW_UNITS 200
 #define RLCD_COL_GROUPS 25
@@ -30,6 +32,12 @@ class RlcdRefreshTest(unittest.TestCase):
 typedef int esp_err_t;
 typedef struct { size_t length; const void *tx_buffer; } spi_transaction_t;
 static int s_spi;
+static int s_rotation;
+#ifdef CONFIG_RLCD42_DARK_MODE
+static bool s_dark=true;
+#else
+static bool s_dark=false;
+#endif
 static uint8_t s_fb[RLCD_FB_BYTES], s_tx[RLCD_TX_BYTES];
 static int fail_transfer;
 static esp_err_t rlcd_cmd_data(uint8_t cmd, const uint8_t *p, size_t n) {
@@ -54,17 +62,27 @@ int main(void) {
     memcpy(original, s_fb, sizeof(s_fb));
     assert(rlcd_flush()==ESP_OK);
     assert(memcmp(original, s_fb, sizeof(s_fb))==0);
-    for (int y=0;y<300;++y) for (int x=0;x<400;++x) {
-        unsigned expected=(s_fb[y*50+x/8]>>(7-x%8))&1;
-#ifdef CONFIG_RLCD42_DARK_MODE
-        expected^=1;
-#endif
-        assert(panel_pixel(x,y)==expected);
+    for(s_rotation=0;s_rotation<4;s_rotation++) {
+      assert(rlcd_flush()==ESP_OK);
+      for (int y=0;y<RLCD_H;++y) for (int x=0;x<RLCD_W;++x) {
+        unsigned expected=(s_fb[y*RLCD_ROW_BYTES+x/8]>>(7-x%8))&1;
+        if(s_dark) expected^=1;
+        int sx=x,sy=y;
+        if(s_rotation==1) {sx=399-y;sy=x;}
+        if(s_rotation==2) {sx=399-x;sy=299-y;}
+        if(s_rotation==3) {sx=y;sy=299-x;}
+        assert(panel_pixel(sx,sy)==expected);
+      }
+      assert(memcmp(original,s_fb,sizeof(s_fb))==0);
     }
+    s_rotation=0;assert(rlcd_flush()==ESP_OK);
     memcpy(transfer, s_tx, sizeof(s_tx));
     assert(rlcd_flush()==ESP_OK);
     assert(memcmp(original, s_fb, sizeof(s_fb))==0);
     assert(memcmp(transfer, s_tx, sizeof(s_tx))==0);
+    s_dark=!s_dark;
+    assert(rlcd_flush()==ESP_OK);
+    assert(memcmp(original,s_fb,sizeof(s_fb))==0);
     s_fb[0]^=0x80; /* A later partial image draw. */
     unsigned before=panel_pixel(0,0);
     assert(rlcd_flush()==ESP_OK);

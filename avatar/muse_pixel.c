@@ -879,6 +879,20 @@ void muse_pixel_scale(uint16_t *dst, int stride_px, int x0, int x1, int y0, int 
     }
 }
 
+// Paper palette preserves light fur and dark facial details. Ambient glow is
+// transparent on paper, rather than becoming a black halo after inversion.
+void muse_pixel_scale_paper(uint8_t *dst,int width,int y) {
+    const uint8_t *row=&s_fb[(s_map[y]&0x7f)*W];
+    for(int x=0;x<width;x++) {
+        unsigned c=row[s_map[x]&0x7f];int ink=0;
+        if(c==C_OUT || c==C_OUT2 || c==C_IRIS || c==C_BROW || c==C_MOUTH || c==C_HEART || c==C_SPK) ink=255;
+        else if(c==C_BD) ink=60;
+        else if(c==C_BM || c==C_BLUSHD) ink=24;
+        else if(c==C_RIM) ink=110;
+        dst[x]=ink;
+    }
+}
+
 void muse_pixel_render(const muse_pose_t *p)
 {
     static bool s_luts;

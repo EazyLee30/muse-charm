@@ -15,6 +15,15 @@ class RlcdConsoleTest(unittest.TestCase):
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+typedef struct {} cJSON;
+static cJSON *cJSON_Parse(const char *s) {(void)s;return NULL;}
+static cJSON *cJSON_GetObjectItem(cJSON *o,const char *s) {(void)o;(void)s;return NULL;}
+static const char *cJSON_GetStringValue(cJSON *o) {(void)o;return NULL;}
+static void cJSON_Delete(cJSON *o) {(void)o;}
+static char *cJSON_PrintUnformatted(cJSON *o) {(void)o;return NULL;}
+static bool config_set_str(const char *k,const char *v) {(void)k;(void)v;return false;}
+static bool muse_tts_configure(const char *k) {(void)k;return false;}
+static cJSON *charm_command(const char *c,cJSON *p) {(void)c;(void)p;return NULL;}
 #define CHAT_MAX 32
 #define MALLOC_CAP_SPIRAM 1
 #define MALLOC_CAP_8BIT 2

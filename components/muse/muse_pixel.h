@@ -55,3 +55,5 @@ void muse_pixel_set_size(int px);
  * image never has to exist in RAM.
  */
 void muse_pixel_scale(uint16_t *dst, int stride_px, int x0, int x1, int y0, int y1);
+
+void muse_pixel_scale_paper(uint8_t *dst,int width,int y);

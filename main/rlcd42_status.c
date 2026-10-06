@@ -68,6 +68,23 @@
 #include "pixel_font.h"
 #include "muse_pixel.h"
 #include "stack_monitor.h"
+#include "charm.h"
+#include "charm_font.h"
+
+static volatile bool s_dark = true;
+static int s_rotation;
+static volatile int s_requested_rotation;
+void charm_ui_rotate(int rotation) {s_requested_rotation=rotation&3;}
+static portMUX_TYPE s_caption_lock=portMUX_INITIALIZER_UNLOCKED;
+static char s_caption[512];
+static int64_t s_caption_until;
+void charm_ui_caption(const char *text) {
+    portENTER_CRITICAL(&s_caption_lock);
+    snprintf(s_caption,sizeof(s_caption),"%s",text?text:"");
+    s_caption_until=esp_timer_get_time()+15000000;
+    portEXIT_CRITICAL(&s_caption_lock);
+}
+void charm_ui_set_dark(bool dark) {s_dark=dark;}
 
 static const char *TAG = "link.led";
 
@@ -82,9 +99,9 @@ static const char *TAG = "link.led";
 #define RLCD_SPI_HZ   (24 * 1000 * 1000)
 
 // Logical screen: 400x300 landscape (U8G2_R1 of the 300x400 panel).
-#define RLCD_W         400
-#define RLCD_H         300
-#define RLCD_ROW_BYTES (RLCD_W / 8)
+#define RLCD_W         ((s_rotation&1)?300:400)
+#define RLCD_H         ((s_rotation&1)?400:300)
+#define RLCD_ROW_BYTES ((RLCD_W + 7) / 8)
 #define RLCD_FB_BYTES  (RLCD_ROW_BYTES * RLCD_H)  // 15000
 
 // Full-frame transfer: 200 row units (2 px each) x 25 column groups
@@ -260,11 +277,22 @@ static void fb_text_centered(const char *t, int y, int scale) {
     fb_text(t, (RLCD_W - text_width(t, scale)) / 2, y, scale);
 }
 
-// ---- Official Muse avatar, adapted to the reflective monochrome panel ----
-// Reuse the SDK's procedural renderer and state/level animation. Ordered
-// dithering gives the colour fur shades texture without grayscale hardware.
-#define AVATAR_SIZE 176
+// ---- Layout shared by every orientation ----------------------------------
 #define FRAME_MS 200
+#define AVATAR_MAX 240
+static struct {int size,x,y,cx,cy,bubble_y;} s_layout;
+static bool caption_visible(void) {return s_caption[0] && esp_timer_get_time()<s_caption_until;}
+static void layout_frame(void) {
+    bool portrait=RLCD_H>RLCD_W,caption=caption_visible();
+    int bottom=s_rotation==2?30:10;
+    s_layout.bubble_y=RLCD_H-bottom-70;
+    s_layout.size=portrait?240:caption?(s_rotation==2?184:200):232;
+    s_layout.x=(RLCD_W-s_layout.size)/2;
+    s_layout.y=portrait?72:caption?28:38;
+    s_layout.cx=RLCD_W/2;s_layout.cy=s_layout.y+s_layout.size/2;
+}
+
+// Official Muse renderer, with room to wander and a palette for paper.
 static void draw_muse(led_state_t state, led_voice_t voice, int level_q) {
     muse_mode_t mode = MUSE_MODE_IDLE;
     if (state == LED_STATE_BOOT) mode = MUSE_MODE_BOOT;
@@ -276,84 +304,32 @@ static void draw_muse(led_state_t state, led_voice_t voice, int level_q) {
     static int64_t changed_at;
     int64_t now = esp_timer_get_time();
     if (mode != last) { last = mode; changed_at = now; }
-    muse_pose_t pose = {
-        .mode = mode, .t = now / 1000000.0f,
-        .mode_t = (now - changed_at) / 1000000.0f,
-        .level = level_q / (float)LEVEL_STEPS,
-    };
-    muse_pixel_set_size(AVATAR_SIZE);
-    muse_pixel_render(&pose);
-    static const uint8_t bayer[4][4] = {
-        {0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5},
-    };
-    uint16_t row[AVATAR_SIZE];
-    for (int y = 0; y < AVATAR_SIZE; y++) {
-        muse_pixel_scale(row, AVATAR_SIZE, 0, AVATAR_SIZE - 1, y, y);
-        for (int x = 0; x < AVATAR_SIZE; x++) {
-            uint16_t c = row[x];
-            unsigned r = ((c >> 11) & 31) * 255 / 31;
-            unsigned g = ((c >> 5) & 63) * 255 / 63;
-            unsigned b = (c & 31) * 255 / 31;
-            unsigned lum = (77 * r + 150 * g + 29 * b) >> 8;
-            fb_px((RLCD_W - AVATAR_SIZE) / 2 + x, 108 + y,
-                  lum > (unsigned)bayer[y & 3][x & 3] * 16 + 8);
+    muse_pose_t pose = {.mode=mode,.t=now/1000000.0f,.mode_t=(now-changed_at)/1000000.0f,.level=level_q/(float)LEVEL_STEPS};
+    charm_view_t view;charm_snapshot(&view);
+    pose.happy=view.reaction==CHARM_PET;
+    int size=s_layout.size;
+    float wander=view.reaction==CHARM_CALM && voice==LED_VOICE_IDLE?sinf(pose.t*.55f):0;
+    int dx=view.offset_x+(int)(wander*(RLCD_W>RLCD_H?32:14));
+    if(view.reaction==CHARM_DANCE) dx+=(int)(15*sinf(pose.t*3));
+    if(dx>28 && RLCD_H>RLCD_W) dx=28;
+    if(dx< -28 && RLCD_H>RLCD_W) dx=-28;
+    if(view.reaction==CHARM_PEEK) dx+=(int)((RLCD_W>RLCD_H?58:24)*sinf(pose.t*1.3f));
+    int dy=view.reaction==CHARM_DANCE?(int)(8*sinf(pose.t*7)):(int)(2*sinf(pose.t*2));
+    if(view.reaction==CHARM_HOP) dy-=(int)(22*fabsf(sinf(pose.t*4)));
+    float stretch=view.reaction==CHARM_STRETCH?1+.10f*sinf(pose.t*2):1;
+    muse_pixel_set_size(size);muse_pixel_render(&pose);
+    static const uint8_t bayer[4][4]={{0,8,2,10},{12,4,14,6},{3,11,1,9},{15,7,13,5}};
+    uint16_t row[AVATAR_MAX];uint8_t paper[AVATAR_MAX];
+    for(int y=0;y<size;y++) {
+        muse_pixel_scale(row,size,0,size-1,y,y);
+        if(!view.dark) muse_pixel_scale_paper(paper,size,y);
+        for(int x=0;x<size;x++) {
+            uint16_t c=row[x];unsigned r=((c>>11)&31)*255/31,g=((c>>5)&63)*255/63,b=(c&31)*255/31;
+            unsigned lum=(77*r+150*g+29*b)>>8;
+            fb_px(s_layout.x+x+dx,s_layout.y+size/2+(int)((y-size/2)*stretch)+dy,(view.dark?lum:paper[x])>(unsigned)bayer[y&3][x&3]*16+8);
         }
     }
 }
-
-// ---- Voice icons (original single-bit drawings) -------------------------------
-
-static void draw_mic(void) {
-    fb_rect(188, 118, 24, 42, true);       // capsule
-    fb_rect(192, 127, 16, 3, false);       // grill slits
-    fb_rect(192, 137, 16, 3, false);
-    fb_rect(192, 147, 16, 3, false);
-    fb_rect(182, 148, 6, 24, true);        // yoke
-    fb_rect(212, 148, 6, 24, true);
-    fb_rect(182, 166, 36, 6, true);
-    fb_rect(197, 172, 6, 16, true);        // stand
-    fb_rect(184, 188, 32, 6, true);
-}
-
-static void draw_level(int q) {
-    for (int i = 0; i < LEVEL_STEPS; i++) {
-        int h = i < q ? 12 : 3;
-        fb_rect(150 + i * 10, 298 - h, 8, h, true);
-    }
-}
-
-static void draw_speaker(void) {
-    fb_rect(166, 138, 28, 54, true);  // box
-    for (int x = 194; x <= 226; x++) {  // cone
-        int t = x - 194;
-        fb_rect(x, 138 - t * 26 / 32, 1, 54 + t * 52 / 32, true);
-    }
-    for (int deg = -45; deg <= 45; deg += 5) {  // sound waves
-        double rad = deg * 3.141592653589793 / 180.0;
-        fb_rect((int)(228 + 28 * cos(rad)), (int)(165 + 28 * sin(rad)), 5, 5, true);
-        fb_rect((int)(228 + 42 * cos(rad)), (int)(165 + 42 * sin(rad)), 5, 5, true);
-    }
-}
-
-static void draw_dots(void) {
-    fb_circle(172, 165, 9, true);
-    fb_circle(200, 165, 9, true);
-    fb_circle(228, 165, 9, true);
-}
-
-static void draw_arrow_down(void) {
-    fb_rect(192, 118, 16, 40, true);
-    for (int i = 0; i < 16; i++) fb_hline(184 + i, 158 + i, 32 - 2 * i, true);
-}
-
-static void draw_x(void) {
-    for (int i = 0; i < 56; i++) {
-        fb_rect(172 + i, 137 + i, 8, 8, true);
-        fb_rect(228 - i, 137 + i, 8, 8, true);
-    }
-}
-
-// ---- Status screen ------------------------------------------------------------
 
 static const char *conn_label(led_state_t s) {
     switch (s) {
@@ -390,17 +366,110 @@ static const char *voice_label(led_voice_t v) {
 }
 
 // Caller holds s_lock.
-static void render_status(const char *title, led_state_t state, led_voice_t voice, int level_q) {
-    memset(s_fb, 0x00, RLCD_FB_BYTES);  // white paper
-        const char *name = title[0] ? title : "Muse";
-    int scale = text_width(name, 3) <= RLCD_W - 48 ? 3 :
-                text_width(name, 2) <= RLCD_W - 48 ? 2 : 1;
-    fb_text_centered(name, 20, scale);
-    fb_rect(24, 60, RLCD_W - 48, 2, true);
-    const char *vl = voice_label(voice);
-    fb_text_centered(vl ? vl : conn_label(state), 80, 2);
-    draw_muse(state, voice, level_q);
-    if (voice == LED_VOICE_LISTENING) draw_level(level_q);
+static void fb_round_rect(int x,int y,int w,int h,int radius,bool ink) {
+    fb_rect(x+radius,y,w-2*radius,h,ink);fb_rect(x,y+radius,w,h-2*radius,ink);
+    fb_circle(x+radius,y+radius,radius,ink);fb_circle(x+w-radius-1,y+radius,radius,ink);
+    fb_circle(x+radius,y+h-radius-1,radius,ink);fb_circle(x+w-radius-1,y+h-radius-1,radius,ink);
+}
+static void draw_caption(void) {
+    char text[512];int64_t until;
+    portENTER_CRITICAL(&s_caption_lock);memcpy(text,s_caption,sizeof(text));until=s_caption_until;portEXIT_CRITICAL(&s_caption_lock);
+    if(!text[0] || esp_timer_get_time()>until) return;
+    int bx=RLCD_H>RLCD_W?25:20,by=s_layout.bubble_y,bw=RLCD_W-2*bx;
+    // Soft rounded outline, breathing room and a small conversational tail.
+    fb_round_rect(bx+2,by+2,bw,68,10,true);
+    fb_round_rect(bx,by,bw,68,10,true);fb_round_rect(bx+1,by+1,bw-2,66,9,false);
+    for(int i=0;i<7;i++) fb_hline(bx+24+i,by-6+i,2,true);
+    fb_rect(bx+31,by,8,2,false);
+    int x=bx+12,y=by+9;size_t pos=0;
+    while(text[pos]) {
+        uint32_t cp=(unsigned char)text[pos++];
+        if(cp>=0xc0) {int extra=cp<0xe0?1:cp<0xf0?2:3;cp&=(1u<<(6-extra))-1;
+            for(int i=0;i<extra;i++) {if(((unsigned char)text[pos]&0xc0)!=0x80) {cp='?';break;}cp=(cp<<6)|((unsigned char)text[pos++]&63);}}
+        int width=charm_font_advance(cp);
+        if(cp=='\n' || x+width>bx+bw-12) {x=bx+12;y+=24;if(cp=='\n') continue;}
+        if(y+CHARM_FONT_H>by+61) {fb_text("...",bx+bw-28,by+56,1);break;}
+        const uint8_t *g=charm_font_glyph(cp);
+        if(g) {for(int yy=0;yy<CHARM_FONT_H;yy++) for(int xx=0;xx<CHARM_FONT_W;xx++)
+            if(g[yy*CHARM_FONT_STRIDE+xx/8]&(128>>(xx%8))) fb_px(x+xx,y+yy,true);}
+        else {fb_rect(x+2,y+4,12,14,true);fb_rect(x+3,y+5,10,12,false);}
+        x+=width;
+    }
+}
+
+// Hardware button positions viewed from the front: KEY left of PWR, BOOT right.
+// Keep the cue on the same physical edge as the key as the screen turns.
+static void draw_button_cue(int physical_x,const char *label,bool pressed) {
+    int width=text_width(label,1)+12,x=physical_x,y=0;
+    if(s_rotation==1) {x=0;y=399-physical_x;}
+    if(s_rotation==2) {x=399-physical_x;y=RLCD_H-1;}
+    if(s_rotation==3) {x=RLCD_W-1;y=physical_x;}
+    if(s_rotation==0 || s_rotation==2) {
+        int by=s_rotation==0?6:RLCD_H-23;
+        fb_round_rect(x-width/2,by,width,17,5,true);
+        if(!pressed) fb_round_rect(x-width/2+1,by+1,width-2,15,4,false);
+        // Text stays solid; a filled rail and bouncing dot communicate pressure.
+        if(pressed) fb_rect(x-width/2+5,by+4,width-10,9,false);
+        fb_text(label,x-width/2+6,by+5,1);
+        fb_rect(x-12,s_rotation==0?0:RLCD_H-(pressed?3:1),24,pressed?3:1,true);
+    } else {
+        int bx=s_rotation==1?4:RLCD_W-width-4,by=y-8;
+        fb_round_rect(bx,by,width,17,5,true);
+        if(!pressed) fb_round_rect(bx+1,by+1,width-2,15,4,false);
+        if(pressed) fb_rect(bx+5,by+4,width-10,9,false);
+        // Keep letters upright in logical space; panel rotation turns them too.
+        fb_text(label,bx+6,by+5,1);
+        fb_rect(s_rotation==1?0:RLCD_W-(pressed?3:1),y-12,pressed?3:1,24,true);
+    }
+}
+
+static void draw_header(charm_view_t *v,led_state_t state) {
+    fb_text(v->clock[0]?v->clock:"--:--",8,10,1);
+    char battery[8];snprintf(battery,sizeof(battery),v->battery_pct>=0?"%d%%":"--%%",v->battery_pct);
+    int bw=text_width(battery,1),right=RLCD_W-8;
+    fb_rect(right-14,9,12,9,true);fb_rect(right-13,10,10,7,false);fb_rect(right-2,12,2,3,true);
+    if(v->battery_pct>=0) fb_rect(right-12,11,8*v->battery_pct/100,5,true);
+    fb_text(battery,right-19-bw,10,1);
+    int signal=right-27-bw;
+    for(int i=0;i<3;i++) fb_rect(signal-12+i*4,16-i*3,3,2+i*3,v->wifi);
+    fb_circle(signal-20,13,2,state==LED_STATE_WS_CONNECTED);
+    if(v->pad_connected || v->pad_pairing) fb_text(v->pad_connected?"B":"?",signal-31,10,1);
+}
+
+static void render_status(const char *title,led_state_t state,led_voice_t voice,int level_q) {
+    (void)title;memset(s_fb,0,RLCD_FB_BYTES);layout_frame();
+    charm_view_t v;charm_snapshot(&v);float t=esp_timer_get_time()/1000000.0f;
+    draw_header(&v,state);
+    const char *vl=voice_label(voice);
+    const char *reaction=v.reaction==CHARM_HOP?"Boing!":v.reaction==CHARM_PEEK?"Peek-a-boo":v.reaction==CHARM_STRETCH?"Big stretch":v.reaction==CHARM_DANCE?"Dance with me":v.reaction==CHARM_SLEEP?"Sweet dreams":NULL;
+    draw_muse(state,voice,level_q);
+    fb_text_centered(vl?vl:reaction?reaction:conn_label(state),34,1);
+    int cx=s_layout.cx,cy=s_layout.cy;
+    if(voice==LED_VOICE_THINKING || voice==LED_VOICE_TRANSCRIBING) {
+        for(int i=0;i<3;i++) {float a=t*2+i*2.0944f;int x=cx+(int)((s_layout.size*.43f)*cosf(a)),y=cy+(int)(52*sinf(a));
+            fb_rect(x-2,y-5,4,10,true);fb_rect(x-5,y-2,10,4,true);}
+    }
+    if(voice==LED_VOICE_SPEAKING || v.reaction==CHARM_DANCE) {
+        int spread=RLCD_W>RLCD_H?110:96,dy=(int)(5*sinf(t*5));
+        fb_rect(cx-spread,cy+dy,2,24,true);fb_circle(cx-spread-4,cy+25+dy,4,true);fb_rect(cx-spread,cy+dy,12,3,true);
+        fb_rect(cx+spread,cy+12-dy,2,22,true);fb_circle(cx+spread-4,cy+35-dy,4,true);
+    }
+    if(v.reaction==CHARM_PET) for(int i=0;i<3;i++) {
+        int spread=RLCD_W>RLCD_H?102:84,x=cx-spread+i*spread,y=cy-38-(int)(v.reaction_t*10)%30;
+        fb_circle(x-3,y,4,true);fb_circle(x+3,y,4,true);for(int j=0;j<8;j++) fb_hline(x-7+j,y+j,15-2*j,true);
+    }
+    if(v.reaction==CHARM_WAVE) {
+        int x=cx+(RLCD_W>RLCD_H?104:92),y=cy+(int)(8*sinf(t*8));fb_circle(x,y,7,true);
+        fb_rect(x-6,y-24,2,19,true);fb_rect(x,y-27,2,22,true);fb_rect(x+6,y-22,2,17,true);
+    }
+    if(v.reaction==CHARM_SLEEP) fb_text("Z z",cx+68,cy-58+(int)(3*sinf(t)),2);
+    if(voice==LED_VOICE_LISTENING) {
+        int base=s_layout.bubble_y-8;
+        for(int i=0;i<LEVEL_STEPS;i++) {int h=i<level_q?5+(int)(5*fabsf(sinf(t*8+i))):2;fb_rect(cx-34+i*7,base-h,4,h,true);}
+    }
+    draw_caption();
+    draw_button_cue(156,voice==LED_VOICE_LISTENING?"KEY REC":"KEY HOLD",v.key_pressed);
+    draw_button_cue(244,"BOOT",v.boot_pressed);
 }
 
 // Caller holds s_lock.
@@ -425,6 +494,7 @@ static void render_volume(int percent) {
 // shows at panel (299 - y, x)), then write the full window.
 // Caller holds s_panel_lock and s_lock.
 static esp_err_t rlcd_flush(void) {
+    const bool dark=s_dark;
     for (int ru = 0; ru < RLCD_ROW_UNITS; ru++) {
         for (int cg = 0; cg < RLCD_COL_GROUPS; cg++) {
             uint8_t *out = s_tx + ((size_t)ru * RLCD_COL_GROUPS + cg) * 3;
@@ -433,20 +503,18 @@ static esp_err_t rlcd_flush(void) {
                 for (int p = 0; p < 4; p++) {
                     int bx = cg * 12 + b * 4 + p;  // panel column 0..299
                     // R1: panel (bx, by) shows fb (x, y) = (by, 299 - bx).
-                    int fb_y = 299 - bx;
-                    int fb_x_even = ru * 2, fb_x_odd = ru * 2 + 1;
-                    const uint8_t *row = s_fb + (size_t)fb_y * RLCD_ROW_BYTES;
-                    int even = (row[fb_x_even >> 3] >> (7 - (fb_x_even & 7))) & 1;
-                    int odd = (row[fb_x_odd >> 3] >> (7 - (fb_x_odd & 7))) & 1;
+                    int even=0,odd=0;
+                    for(int pair=0;pair<2;pair++) {
+                        int px=ru*2+pair,py=299-bx,x=px,y=py;
+                        if(s_rotation==1) {x=py;y=399-px;}
+                        if(s_rotation==2) {x=399-px;y=299-py;}
+                        if(s_rotation==3) {x=299-py;y=px;}
+                        int ink=(s_fb[(size_t)y*RLCD_ROW_BYTES+x/8]>>(7-x%8))&1;
+                        if(pair) odd=ink;else even=ink;
+                    }
                     v = (v << 2) | (unsigned)(even ? 2 : 0) | (unsigned)(odd ? 1 : 0);
                 }
-#ifdef CONFIG_RLCD42_DARK_MODE
-                // Invert only the transfer data; repeated image flushes and
-                // partial draws must preserve the canonical framebuffer.
-                out[b] = (uint8_t)(v ^ 0xFF);
-#else
-                out[b] = (uint8_t)v;
-#endif
+                out[b] = (uint8_t)(dark ? v ^ 0xFF : v);
             }
         }
     }
@@ -487,6 +555,7 @@ static void rlcd_task(void *arg) {
 
         xSemaphoreTake(s_panel_lock, portMAX_DELAY);
         xSemaphoreTake(s_lock, portMAX_DELAY);
+        if(s_rotation!=s_requested_rotation) {s_rotation=s_requested_rotation;s_image_mode=false;}
         bool image = s_image_mode;
         xSemaphoreGive(s_lock);
         if (!image) {
@@ -546,7 +615,7 @@ static esp_err_t rlcd_spi_init(void) {
 }
 
 bool led_status_init(void) {
-    s_fb = heap_caps_malloc(RLCD_FB_BYTES, MALLOC_CAP_SPIRAM);
+    s_fb = heap_caps_malloc(15200, MALLOC_CAP_SPIRAM);
     s_tx = heap_caps_malloc(RLCD_TX_BYTES, MALLOC_CAP_DMA);
     s_panel_lock = xSemaphoreCreateMutex();
     s_lock = xSemaphoreCreateMutex();

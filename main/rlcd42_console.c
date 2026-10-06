@@ -13,6 +13,9 @@
 #include "muse_console.h"
 #include "wifi_mgr.h"
 #include "voice.h"
+#include "muse_tts.h"
+#include "charm.h"
+#include "driver/usb_serial_jtag_vfs.h"
 
 #define CHAT_MAX (192 * 1024)
 #define RLCD_CONSOLE_LINE_MAX 1024
@@ -41,6 +44,20 @@ static void status(void) {
 }
 
 static void command(char *line, bool whole) {
+    if (whole && !strncmp(line,"tts.setup=",10)) {
+        cJSON *root=cJSON_Parse(line+10);
+        const char *key=cJSON_GetStringValue(cJSON_GetObjectItem(root,"key"));
+        bool ok=key && strlen(key)<256 && config_set_str("tts_key",key) && muse_tts_configure(key);
+        printf("@tts {\"configured\":%s}\n",ok?"true":"false");fflush(stdout);
+        cJSON_Delete(root);memset(line,0,strlen(line));return;
+    }
+    if(whole && !strncmp(line,"charm.",6)) {
+        char *eq=strchr(line,'=');cJSON *params=NULL;
+        if(eq) {*eq=0;params=cJSON_Parse(eq+1);}
+        cJSON *out=charm_command(line,params);char *json=cJSON_PrintUnformatted(out);
+        if(json) {printf("@charm %s\n",json);fflush(stdout);free(json);}
+        cJSON_Delete(out);cJSON_Delete(params);return;
+    }
     if (!strcmp(line, "audio.test")) {
         printf("@audio {\"queued\":%s}\n", voice_speaker_test() ? "true" : "false");
         fflush(stdout); return;
@@ -78,6 +95,7 @@ static void console_task(void *arg) {
         ESP_LOGE("rlcd.console", "USB console install failed");
         vTaskDelete(NULL); return;
     }
+    usb_serial_jtag_vfs_use_driver();
     char *line = heap_caps_malloc(RLCD_CONSOLE_LINE_MAX, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!line) { vTaskDelete(NULL); return; }
     for (;;) {
@@ -94,6 +112,6 @@ static void console_task(void *arg) {
 }
 
 void rlcd42_console_start(void) {
-    if (xTaskCreate(console_task, "rlcd_console", 3584, NULL, 3, NULL) != pdPASS)
+    if (xTaskCreate(console_task, "rlcd_console", 8192, NULL, 3, NULL) != pdPASS)
         ESP_LOGE("rlcd.console", "USB console task unavailable");
 }

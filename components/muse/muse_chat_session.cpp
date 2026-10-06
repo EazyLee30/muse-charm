@@ -1,3 +1,7 @@
+#include "sdkconfig.h"
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+#include "muse_tts.h"
+#endif
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
@@ -953,6 +957,9 @@ static void turn_reset_streams(void)
 
 static void turn_finish(void)
 {
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    muse_tts_cancel_session();
+#endif
     turn_reset_streams();
     s_turn.phase = P_IDLE;
     s_turn.dict_id = s_turn.chat_id = 0;
@@ -1511,26 +1518,19 @@ static void start_tts(void)
         if (m.tts != TTS_QUEUED) {
             continue;
         }
-        /*
-         * Replies are text, shown at reading pace: silence in place of speech
-         * paces the captions and ends the turn. To speak them instead, send
-         * the message's text (s_turn.texts + i * TEXT_MAX, if texts was
-         * allocated; up to TEXT_MAX - 1 bytes) to a TTS API of your choice and
-         * play the MP3 it returns. In place of the silence below: keep
-         * m.tts = TTS_ACTIVE and s_turn.tts_msg = i, set s_turn.silent = false,
-         * m.pcm_start = s_turn.pcm_out, m.pcm_frames = 0, s_turn.mp3_len = 0,
-         * s_turn.mp3_ended = false, s_turn.kbps = 0, s_turn.down_rate = 0 and
-         * mp3dec_init(&s_turn.dec). Then, on this task, pass the MP3 to
-         * tts_data() as it arrives (it buffers up to MP3_BUF and drops the
-         * rest, so hold off while it's full) and set s_turn.mp3_ended at the
-         * end. decode() plays it at the speaker's volume, captions following,
-         * and finishes the message once it's drained.
-         */
         m.pcm_start = s_turn.pcm_out;
         m.pcm_frames = (uint32_t)(m.len * MIC_RATE / TEXT_CHARS_PER_S);
         m.tts = TTS_ACTIVE;
         s_turn.tts_msg = i;
         s_turn.silent = true;
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        if (!s_turn.text && s_turn.texts && muse_tts_begin(s_turn.texts + i * TEXT_MAX)) {
+            s_turn.silent = false;
+            m.pcm_frames = 0; s_turn.mp3_len = 0;
+            s_turn.mp3_ended = false; s_turn.kbps = 0; s_turn.down_rate = 0;
+            mp3dec_init(&s_turn.dec);
+        }
+#endif
         ESP_LOGI(TAG, "showing message %s (%u chars)", m.id, (unsigned)m.len);
         show_reply_start(m);
         return;
@@ -1985,6 +1985,17 @@ static void hatch_task(void *arg)
         }
         if (s_turn.phase == P_WAIT_REPLY) {
             start_tts();
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+            if (!s_turn.silent && s_turn.tts_msg >= 0 && !s_turn.mp3_ended) {
+                bool done = false;
+                size_t n = muse_tts_read(s_turn.mp3 + s_turn.mp3_len,
+                                        MP3_BUF - s_turn.mp3_len, &done);
+                if(n) mark(M_MP3);
+                s_turn.mp3_len += n;
+                s_turn.mp3_ended = done;
+                if(done && muse_tts_failed()) {turn_fail("SPEECH SYNTHESIS FAILED");continue;}
+            }
+#endif
             decode();
         }
         if (!s_connected) {

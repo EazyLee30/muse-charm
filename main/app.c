@@ -1,3 +1,8 @@
+#include "sdkconfig.h"
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+#include "charm.h"
+#include "muse_tts.h"
+#endif
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
@@ -1838,6 +1843,9 @@ static cJSON *bug_report_command(
 static cJSON *on_ws_command(
     const char *command, cJSON *params, const char *request_id,
     noise_ctrl_session_generation_t session_generation) {
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    if (!strncmp(command,"charm.",6)) return charm_command(command,params);
+#endif
     if (strcmp(command, "device.list_vms") == 0) {
         return list_vms_command();
     }
@@ -2122,11 +2130,23 @@ static void on_button_short_press(void) {
         return;
     }
 
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    cJSON *params=cJSON_CreateObject();cJSON_AddStringToObject(params,"mode","toggle");
+    cJSON *result=charm_command("charm.configure",params);cJSON_Delete(result);cJSON_Delete(params);
+#else
     ESP_LOGI(TAG, "button short-press ignored; setup already complete");
+#endif
 }
 
 static void on_button_double_press(void) {
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    if(config_setup_complete()) {
+        cJSON *params=cJSON_CreateObject();cJSON_AddStringToObject(params,"rotate","right");
+        cJSON *result=charm_command("charm.configure",params);cJSON_Delete(result);cJSON_Delete(params);
+    }
+#else
     ESP_LOGI(TAG, "button double-press ignored");
+#endif
 }
 
 static void on_button_long_press(void) {
@@ -2501,7 +2521,7 @@ void app_run(void) {
     ESP_LOGI(TAG, "  Region:   %s", have_region ? region : "(none)");
     ESP_LOGI(TAG, "  Verify:   %s", link_pairing_sign_factory_test());
     // Only the hint gadgets.muse.ai displays; the full token is never logged.
-    ESP_LOGI(TAG, "  SDK token:  %.12s", identity_sdk_token() ? identity_sdk_token() : "(none)");
+    ESP_LOGI(TAG, "  SDK token:  %s", identity_sdk_token() ? "configured" : "(none)");
     ESP_LOGI(TAG, "========================");
 
     if (!identity_sdk_token() || identity_sdk_token()[0] == '\0') {
@@ -2634,6 +2654,11 @@ void app_run(void) {
 #if CONFIG_HOMEHUB_VOICE
     voice_init();
 #if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    charm_start();
+    muse_tts_init();
+    char tts_key[256];
+    if(config_get_str("tts_key",tts_key,sizeof(tts_key))) muse_tts_configure(tts_key);
+    memset(tts_key,0,sizeof(tts_key));
     extern void rlcd42_console_start(void);
     rlcd42_console_start();
 #endif

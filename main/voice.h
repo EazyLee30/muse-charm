@@ -35,3 +35,9 @@ cJSON *voice_configure_command(cJSON *params);
 
 // Queue a one-second two-note speaker diagnostic when the voice session is idle.
 bool voice_speaker_test(void);
+
+// Queue real speech; false when another audio turn is active.
+bool voice_say(const char *text);
+
+bool voice_play_music(const char *source);
+void voice_stop_music(void);

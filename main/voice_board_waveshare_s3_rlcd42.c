@@ -432,7 +432,7 @@ void voice_board_amp(bool on) {
         for (size_t i = 0; i < sizeof(regs); i++) {
             uint8_t value = 0;
             if (es8311_read(regs[i], &value) == ESP_OK)
-                ESP_LOGI(TAG, "DAC reg %02x=%02x", regs[i], value);
+                ESP_LOGD(TAG, "DAC reg %02x=%02x", regs[i], value);
         }
         ESP_LOGI(TAG, "amplifier GPIO%d=%d", PIN_AMP_EN, gpio_get_level(PIN_AMP_EN));
     }

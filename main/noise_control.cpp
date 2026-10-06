@@ -1,3 +1,9 @@
+#include "sdkconfig.h"
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+extern "C" {
+#include "charm.h"
+}
+#endif
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
@@ -1355,6 +1361,33 @@ static char *build_register_json(void) {
     }
 #endif
 
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    add_command(commands,"charm.status","Inspect Muse Charm: Waveshare ESP32-S3-RLCD-4.2, 400x300 monochrome reflective screen, KEY push-to-talk, microphone, speaker, estimated battery, BLE gamepad. Location is a user label, no GPS.",nullptr,nullptr);
+    add_command(commands,"charm.sensors","Read onboard SHTC3 temperature in Celsius and relative humidity, plus RTC validity.",nullptr,nullptr);
+    cJSON *storage_options=cJSON_CreateObject();cJSON_AddItemToObject(storage_options,"path",string_param("Directory relative to SD card root; omit to list root. Never formats or writes."));
+    add_command(commands,"charm.storage.list","Read SD card directory and file sizes. List folders to find local MP3 songs.",nullptr,storage_options);
+    cJSON *read_required=cJSON_CreateObject();cJSON_AddItemToObject(read_required,"path",string_param("Text file relative to SD card root; reads up to 2048 bytes."));
+    add_command(commands,"charm.storage.read","Read a small text file on the inserted SD card.",read_required,nullptr);
+    cJSON *music_options=cJSON_CreateObject();
+    cJSON_AddItemToObject(music_options,"action",string_param("play or stop"));
+    cJSON_AddItemToObject(music_options,"url",string_param("Direct public HTTP(S) MP3 audio URL. Search for a playable song or preview first, not a website/DRM link."));
+    cJSON_AddItemToObject(music_options,"path",string_param("Alternatively a local MP3 path relative to SD root, discovered via charm.storage.list."));
+    add_command(commands,"charm.music","Play a requested song on the physical speaker from a direct MP3 URL or SD file. Muse can search the web for accessible audio. No built-in music subscription/catalog; do not pretend website links are audio. KEY stops music.",nullptr,music_options);
+    cJSON *charm_options=cJSON_CreateObject();
+    cJSON_AddItemToObject(charm_options,"timezone",string_param("Change local clock zone: Asia/Shanghai, Asia/Hong_Kong, Asia/Tokyo, Asia/Singapore, America/Los_Angeles, America/New_York, Europe/London, Europe/Berlin, Australia/Sydney, UTC, or a fixed UTC+08:00/UTC-07:00 offset. Saved across reboot."));
+    cJSON_AddItemToObject(charm_options,"rotate",string_param("Rotate the entire screen 90 degrees left or right, or reset to landscape: left, right, reset."));
+    cJSON_AddItemToObject(charm_options,"mode",string_param("Screen background: dark, light or toggle. This screen supports black and white only."));
+    cJSON_AddItemToObject(charm_options,"reaction",string_param("Make Muse react: calm, pet, dance, wave, sleep, hop (jump), peek (peek-a-boo), or stretch."));
+    cJSON_AddItemToObject(charm_options,"location",string_param("Set a user supplied location label, such as desk. No GPS measurement."));
+    add_command(commands,"charm.configure","Control this physical Muse Charm screen and character. Changes apply immediately; background, rotation and location persist.",nullptr,charm_options);
+    cJSON *speech_required=cJSON_CreateObject();
+    cJSON_AddItemToObject(speech_required,"text",string_param("Text to speak aloud on Muse Charm, up to 1023 UTF-8 bytes. Uses configured Qwen TTS."));
+    add_command(commands,"charm.speak","Speak aloud using the physical device speaker; returns queued status. Use when the user asks the device to speak.",speech_required,nullptr);
+    cJSON *pad_required=cJSON_CreateObject();
+    cJSON_AddItemToObject(pad_required,"action",string_param("pair opens a 3 minute BLE gamepad window; disconnect stops the controller. Controller must expose BLE HID; Q36 compatibility depends on its mode and variant."));
+    add_command(commands,"charm.controller","Connect a BLE HID gamepad; A pet, B theme, X dance, Y wave, D-pad move. ESP32-S3 does not support Bluetooth Classic.",pad_required,nullptr);
+#endif
+
 #if CONFIG_HOMEHUB_VOICE
     cJSON *volume_optional = cJSON_CreateObject();
     cJSON *volume_param = cJSON_CreateObject();
@@ -1514,6 +1547,12 @@ static void send_device_health(
                             heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     cJSON *battery_pct = nullptr, *battery_mv = nullptr;
     cJSON *charging = nullptr, *usb_power = nullptr;
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    charm_view_t view;charm_snapshot(&view);
+    if(view.battery_pct>=0) battery_pct=cJSON_CreateNumber(view.battery_pct);
+    if(view.battery_mv>0) battery_mv=cJSON_CreateNumber(view.battery_mv);
+    cJSON_AddBoolToObject(metrics,"battery_is_estimate",true);
+#endif
 #if CONFIG_MUSE_ENABLED
     muse_power_t power = muse_state_power();
     if (power.battery_pct >= 0) {

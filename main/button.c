@@ -43,6 +43,7 @@ void button_set_press_cb(button_press_cb cb) {
 #endif
 
 #if CONFIG_HOMEHUB_VOICE && CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+#include "charm.h"
 #define VOICE_KEY_GPIO 18
 // Use the separate KEY for voice; BOOT always retains its setup/reset role.
 static void voice_key_poll(void) {
@@ -76,6 +77,7 @@ static void button_task(void *arg) {
     while (1) {
 #if CONFIG_HOMEHUB_VOICE && CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
         voice_key_poll();
+        charm_buttons(gpio_get_level(VOICE_KEY_GPIO)==0,gpio_get_level(BTN_GPIO)==0);
 #endif
         bool pressed = (gpio_get_level(BTN_GPIO) == 0);
 
