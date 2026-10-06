@@ -1,5 +1,7 @@
 <div align="center">
 
+![Muse Charm Banner](docs/banner.png)
+
 # 🖤 Muse Charm
 
 ### A Muse voice gadget for the Waveshare ESP32-S3-RLCD-4.2

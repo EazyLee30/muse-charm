@@ -1,5 +1,7 @@
 <div align="center">
 
+![Muse Charm Banner](docs/banner.png)
+
 # 🖤 Muse Charm
 
 ### 微雪 ESP32-S3-RLCD-4.2 的 Muse 语音小挂件
