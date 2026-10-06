@@ -10,6 +10,7 @@ class RlcdConsoleTest(unittest.TestCase):
         a,b = s.index('static void command('),s.index('static void console_task(')
         prefix = r'''
 #include <assert.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,7 @@ static size_t s_length;
 static int errors, turns, cancels, acks, oom;
 static char result[32];
 static void status(void) {}
+static bool voice_speaker_test(void) {return true;}
 static void *heap_caps_malloc(size_t n,int cap) {(void)cap;return oom?NULL:malloc(n);}
 static size_t muse_hatch_unescape(char *s) {return strlen(s);}
 static void muse_hatch_text_cancel(void) {cancels++;}

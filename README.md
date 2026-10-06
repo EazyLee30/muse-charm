@@ -134,6 +134,10 @@ python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 "Hello, please reply brie
 
 USB text replies use the official SDK console protocol. The upstream session currently paces text with silence; spoken replies require a separate TTS integration. The reflective display shows the animated avatar and status, rather than full chat text. Keep personal SDK credentials and built firmware out of public repositories.
 
+## 🔊 Audio diagnostics
+
+On the USB serial console at 115200 baud, send `>audio.test` followed by Enter to play one second of 440/660 Hz tones through the normal player, ES8311 and amplifier. This tests playback without a TTS service. `@audio {"queued":false}` means the voice hardware is not ready or is busy. After a KEY recording, logs report microphone sample count, peak and RMS amplitude. Speaker I²S failures are logged explicitly. The DAC volume uses the ES8311's 0.5 dB scale, with 100% capped at unity gain.
+
 ## 🧠 How It Works
 
 ```

@@ -54,6 +54,7 @@
  *  .../es7210), using their 48 kHz / MCLK=12.288 MHz coefficient rows.
  */
 #include "voice_board.h"
+#include <math.h>
 
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
@@ -207,6 +208,17 @@ static esp_err_t es8311_init(void) {
     if (err == ESP_OK) err = write_table(es8311_write, fmt, sizeof(fmt) / sizeof(fmt[0]));
     if (err != ESP_OK) return err;
 
+    // The Waveshare codec driver also initializes the analog reference/bias
+    // registers. Reset defaults alone do not power the DAC output reliably.
+    static const regval_t analog[] = {
+        {0x44, 0x08}, {0x44, 0x08}, // vendor repeats the first write for reliability
+        {0x0B, 0x00}, {0x0C, 0x00},
+        {0x10, 0x1F}, {0x11, 0x7F},
+        {0x14, 0x1A}, {0x45, 0x00},
+    };
+    err = write_table(es8311_write, analog, sizeof(analog) / sizeof(analog[0]));
+    if (err != ESP_OK) return err;
+
     // Power up the DAC path.
     static const regval_t pwr[] = {
         {0x32, 0xBF},  // DAC volume 0 dB (voice_board_set_volume adjusts later)
@@ -220,12 +232,19 @@ static esp_err_t es8311_init(void) {
     return write_table(es8311_write, pwr, sizeof(pwr) / sizeof(pwr[0]));
 }
 
+// ES8311 register 0x32 is in 0.5 dB steps; 0xBF is unity gain.
+// A percentage is an amplitude ratio, not a register percentage.
+static uint8_t dac_volume(int percent) {
+    if (percent <= 0) return 0;
+    if (percent >= 100) return 0xBF;
+    return (uint8_t)lroundf(191.0f + 40.0f * log10f(percent / 100.0f));
+}
+
 void voice_board_set_volume(int percent) {
     if (!s_es8311) return;
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
-    // DAC digital volume, linear 0..255 (0xBF ~= 0 dB).
-    uint8_t vol = (uint8_t)(percent * 255 / 100);
+    uint8_t vol = dac_volume(percent);
     xSemaphoreTake(s_lock, portMAX_DELAY);
     uint8_t buf[2] = {0x32, vol};
     esp_err_t err = i2c_master_transmit(s_es8311, buf, sizeof(buf), 100);

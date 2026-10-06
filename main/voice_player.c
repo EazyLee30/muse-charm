@@ -86,7 +86,11 @@ static void player_task(void *arg) {
                 continue;
             }
             size_t frames = upsample(in, got / sizeof(int16_t), out, &last);
-            voice_board_speaker_write(out, frames);
+            esp_err_t err = voice_board_speaker_write(out, frames);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "speaker I2S write failed: %s", esp_err_to_name(err));
+                break;
+            }
             s_started = true;
         }
         vTaskDelay(pdMS_TO_TICKS(AMP_TAIL_MS));

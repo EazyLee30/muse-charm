@@ -12,6 +12,7 @@
 #include "muse_chat.h"
 #include "muse_console.h"
 #include "wifi_mgr.h"
+#include "voice.h"
 
 #define CHAT_MAX (192 * 1024)
 #define RLCD_CONSOLE_LINE_MAX 1024
@@ -40,6 +41,10 @@ static void status(void) {
 }
 
 static void command(char *line, bool whole) {
+    if (!strcmp(line, "audio.test")) {
+        printf("@audio {\"queued\":%s}\n", voice_speaker_test() ? "true" : "false");
+        fflush(stdout); return;
+    }
     if (!strcmp(line, "status")) { status(); return; }
     if (!strcmp(line, "chat.cancel")) {
         free(s_message); s_message = NULL; s_length = 0;

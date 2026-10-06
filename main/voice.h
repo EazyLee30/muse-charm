@@ -23,6 +23,7 @@
 #pragma once
 
 #include "cJSON.h"
+#include <stdbool.h>
 
 // Start the voice task. It brings up the audio hardware and then takes over
 // the button whenever a turn can run.
@@ -31,3 +32,6 @@ void voice_init(void);
 // voice.configure: sets the speaker volume (0-100), kept in NVS. The dial on
 // top sets it too.
 cJSON *voice_configure_command(cJSON *params);
+
+// Queue a one-second two-note speaker diagnostic when the voice session is idle.
+bool voice_speaker_test(void);

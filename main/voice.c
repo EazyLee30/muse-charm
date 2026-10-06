@@ -18,6 +18,7 @@
 
 #include <stdatomic.h>
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 
 #include "esp_heap_caps.h"
@@ -54,10 +55,11 @@ static const char *TAG = "link.voice";
 #define RELEASE_TAIL_MS     250
 #define REPLY_CHUNK         (VOICE_PLAYER_RATE / 50)   // 20 ms
 
-typedef enum { EVT_PRESS, EVT_RELEASE } voice_evt_t;
+typedef enum { EVT_PRESS, EVT_RELEASE, EVT_SPEAKER_TEST } voice_evt_t;
 
 static QueueHandle_t s_events;
 static atomic_bool s_ready;
+static atomic_int s_audio_owner; // 0 idle, 1 voice turn, 2 speaker diagnostic
 static atomic_int s_volume;
 
 static int load_volume(void) {
@@ -116,6 +118,8 @@ static size_t record(void) {
     static int16_t chunk[CAPTURE_CHUNK];
     if (voice_board_mic_start() != ESP_OK) return 0;
     size_t samples = 0;
+    int maximum = 0;
+    uint64_t energy = 0;
     int64_t stop_at = 0;
     while (samples < CAPTURE_MAX) {
         voice_evt_t evt;
@@ -126,11 +130,15 @@ static size_t record(void) {
         int peak = 0;
         size_t got = voice_board_mic_read(chunk, CAPTURE_CHUNK, &peak);
         if (!got) break;
+        if (peak > maximum) maximum = peak;
+        for (size_t i = 0; i < got; i++) energy += (int64_t)chunk[i] * chunk[i];
         muse_hatch_turn_audio(chunk, got);
         samples += got;
         led_status_set_level(peak / 12000.0f);
     }
     voice_board_mic_stop();
+    ESP_LOGI(TAG, "microphone samples=%u peak=%d rms=%.0f", (unsigned)samples, maximum,
+             samples ? sqrt((double)energy / samples) : 0.0);
     if (samples >= CAPTURE_MAX) ESP_LOGI(TAG, "capture limit reached");
     return samples;
 }
@@ -223,13 +231,51 @@ static bool run_turn(void) {
 // button keeps its setup role otherwise.
 static bool on_press(bool pressed) {
     if (pressed) {
-        if (!atomic_load(&s_ready) || voice_board_muted()) return false;
+        if (!atomic_load(&s_ready) || atomic_load(&s_audio_owner) == 2 || voice_board_muted()) return false;
         voice_hatch_refresh();
         if (!muse_hatch_ready()) return false;
+        int expected = 0;
+        if (!atomic_compare_exchange_strong(&s_audio_owner, &expected, 1) && expected != 1) return false;
     }
     voice_evt_t evt = pressed ? EVT_PRESS : EVT_RELEASE;
-    xQueueSend(s_events, &evt, 0);
+    if (xQueueSend(s_events, &evt, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "voice event queue full");
+        return false;
+    }
     return true;
+}
+
+// Test the same player, DAC and amplifier path used by replies, without a network.
+static void speaker_test(void) {
+    int16_t pcm[CAPTURE_CHUNK];
+    voice_player_begin();
+    esp_err_t err = ESP_OK;
+    for (int offset = 0; offset < VOICE_PLAYER_RATE && err == ESP_OK; offset += CAPTURE_CHUNK) {
+        for (int i = 0; i < CAPTURE_CHUNK; i++) {
+            int sample = offset + i;
+            float hz = sample < VOICE_PLAYER_RATE / 2 ? 440.0f : 660.0f;
+            // Fade the edges of each half-second note to prevent clicks.
+            int local = sample % (VOICE_PLAYER_RATE / 2);
+            float gain = fminf(1.0f, fminf(local, VOICE_PLAYER_RATE / 2 - 1 - local) / 160.0f);
+            pcm[i] = (int16_t)(2500.0f * gain * sinf(6.2831853f * hz * sample / VOICE_PLAYER_RATE));
+        }
+        err = voice_player_write(pcm, CAPTURE_CHUNK);
+    }
+    voice_player_end();
+    bool drained = voice_player_wait(5000);
+    if (err != ESP_OK || !drained) voice_player_stop();
+    ESP_LOGI(TAG, "speaker test: write=%s drained=%s", esp_err_to_name(err), drained ? "yes" : "no");
+    atomic_store(&s_audio_owner, 0);
+}
+
+bool voice_speaker_test(void) {
+    if (!atomic_load(&s_ready) || !muse_hatch_ready()) return false;
+    int expected = 0;
+    if (!atomic_compare_exchange_strong(&s_audio_owner, &expected, 2)) return false;
+    voice_evt_t evt = EVT_SPEAKER_TEST;
+    if (xQueueSend(s_events, &evt, 0) == pdTRUE) return true;
+    atomic_store(&s_audio_owner, 0);
+    return false;
 }
 
 static void voice_task(void *arg) {
@@ -246,9 +292,13 @@ static void voice_task(void *arg) {
     ESP_LOGI(TAG, "ready");
 
     for (;;) {
-        if (!pressed_again(portMAX_DELAY)) continue;
+        voice_evt_t event;
+        if (xQueueReceive(s_events, &event, portMAX_DELAY) != pdTRUE) continue;
+        if (event == EVT_SPEAKER_TEST) { speaker_test(); continue; }
+        if (event != EVT_PRESS) continue;
         while (run_turn()) {
         }
+        atomic_store(&s_audio_owner, 0);
     }
 }
 
