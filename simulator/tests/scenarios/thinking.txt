@@ -1,0 +1,8 @@
+# A reply caption while Muse is thinking.
+face=thinking
+caption=Checking the workshop sensors...
+level=0.1
+progress=0.68
+wifi=connected
+paired=true
+advance=1200

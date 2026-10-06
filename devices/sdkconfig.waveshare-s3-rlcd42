@@ -1,0 +1,61 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Waveshare ESP32-S3-RLCD-4.2: ESP32-S3R8 (16 MB flash, 8 MB octal PSRAM),
+# 4.2" 300x400 ST7305 reflective monochrome LCD, ES8311 speaker codec +
+# ES7210 dual-mic ADC, BOOT (GPIO0) and KEY (GPIO18) buttons, native USB.
+# Load last, after sdkconfig.defaults (see README.md in this directory).
+#
+# This is a status-screen + voice board: the ST7305 shows a still status
+# screen (rlcd42_status.c), and push-to-talk voice chat runs over
+# HOMEHUB_VOICE with the ES8311/ES7210 audio
+# (voice_board_waveshare_s3_rlcd42.c). There is no full LVGL UI: the
+# monochrome panel cannot run it.
+#
+# Hardware reference: Waveshare ESP32-S3-RLCD-4.2 schematic and wiki.
+# Pin map verified against the vendor schematic:
+#   LCD (ST7305, SPI2): DC=5, SCLK=11, MOSI=12, CS=40, RST=41 (write-only)
+#   I2C (shared): SDA=13, SCL=14
+#     ES8311 @ 0x18, ES7210 @ 0x40 (some batches 0x42),
+#     PCF85063A RTC @ 0x51, SHTC3 @ 0x70
+#   I2S audio: MCLK=16, BCLK=9, LRCK=45, DOUT=8 (to ES8311),
+#     DIN=10 (from ES7210), PA_CTRL=46 (amp enable, active high)
+#   Buttons: BOOT=GPIO0, KEY=GPIO18 (both active low)
+#   Battery: GPIO4 via 1/3 divider
+#
+# Flash: this board's chip (revision v0.2) cannot boot in QIO mode at 80 MHz
+# (ROM watchdog reset while loading the bootloader). DIO is required, both
+# here and in the flash command.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# ST7305 reflective mono LCD: the status screen backend.
+CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305=y
+# Advertise as <prefix>-Disp-XXXXXX to tell status-screen boards apart.
+CONFIG_HOMEHUB_BLE_NAME_SUFFIX="-Disp"
+# BOOT button, active low. Short press confirms pairing; hold for 5 s resets.
+# KEY (GPIO18) is push-to-talk while voice chat is ready.
+CONFIG_HOMEHUB_BUTTON_GPIO=0
+
+# 16 MB flash; DIO is the safe mode for this board (see above).
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# 8 MB octal PSRAM (ESP32-S3R8). Voice chat needs it.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_MODE_QUAD=n
+CONFIG_SPIRAM_SPEED_80M=y

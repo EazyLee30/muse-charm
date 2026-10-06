@@ -1,0 +1,10 @@
+# Disconnected/error treatment.
+face=error
+caption=CAN'T REACH MUSE
+wifi=failed
+ble=off
+link=error
+paired=true
+battery=18
+usb=false
+advance=1200

@@ -1,0 +1,57 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Seeed SenseCAP Indicator (D1, D1S, D1Pro, D1L): ESP32-S3 with 8 MB octal
+# PSRAM, 8 MB flash, a 4 inch 480x480 ST7701S RGB display, a CH340 USB-UART
+# bridge, and an RP2040 for the sensors (not used). Load last, after
+# sdkconfig.defaults (see README.md in this directory).
+#
+# It overrides the ESP32-C5 assumptions in sdkconfig.defaults; C5-only options
+# there are ignored for this target.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# No status LED: the display shows the status colour in edge bars.
+CONFIG_HOMEHUB_LED_BACKEND_SENSECAP_ST7701=y
+# Advertise as <prefix>-Disp-XXXXXX to tell this board apart from real devices:
+# MuseGadget-Disp in the open-source build, HomeLink-Disp in the internal one.
+CONFIG_HOMEHUB_BLE_NAME_SUFFIX="-Disp"
+# The button on top of the case, active low.
+CONFIG_HOMEHUB_BUTTON_GPIO=38
+
+# 8 MB quad flash, as in the defaults.
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+# Octal PSRAM holds the 450 KB frame buffer.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_MODE_QUAD=n
+CONFIG_SPIRAM_SPEED_80M=y
+# Run code and read-only data from PSRAM, so flash writes (NVS, OTA) do not
+# stall the cache and starve the display.
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+# A 64 KB data cache with 64-byte lines, as Seeed uses: with the default 32 KB
+# the bounce buffers cannot read the frame buffer from PSRAM fast enough and
+# the picture jumps. It costs 32 KB of internal RAM.
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+# The BLE controller already takes ~70 KB of internal RAM on the S3; keep the
+# NimBLE host's allocations in PSRAM so pairing has room.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+# If the display DMA ever falls behind, restart it at the next frame instead
+# of leaving the picture shifted.
+CONFIG_LCD_RGB_RESTART_IN_VSYNC=y

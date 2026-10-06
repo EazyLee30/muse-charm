@@ -1,0 +1,38 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Name,    Type, SubType, Offset,   Size,    Flags
+# Vendor-specified layout (8 MB flash). Dual-OTA app slots (2 MB each) for
+# device.ota + auto-rollback, plus factory product-parameter partitions
+# (prod_data primary / prod_bak backup) at FIXED offsets — do not move these,
+# they are written during manufacturing. otadata selects the boot slot;
+# device.ota writes the inactive ota slot. Slots are capped at 2 MB by the
+# prod_data offset (0x420000); watch the build's check_sizes line.
+#
+# The partition table lives at CONFIG_PARTITION_TABLE_OFFSET=0x10000 (see
+# sdkconfig.defaults), NOT the IDF default 0x8000. A Secure Boot V2 bootloader
+# grows to ~0xB000, overflowing the old 0x6000 ceiling at 0x8000; moving the
+# table to 0x10000 gives it room. The pre-app partitions (nvs/otadata/phy_init)
+# therefore start at 0x11000, +0x8000 vs the pre-0.1.4 layout. The app slots and
+# prod_data/prod_bak offsets are UNCHANGED, so OTA + manufacturing writes are
+# unaffected. dev and release builds share this table (only release burns Secure
+# Boot eFuses). NOTE: this offset move is a re-flash boundary
+# — a device on the pre-0.1.4 table cannot OTA across it.
+nvs,       data, nvs,     0x11000,  0x6000,
+otadata,   data, ota,     0x17000,  0x2000,
+phy_init,  data, phy,     0x19000,  0x1000,
+ota_0,     app,  ota_0,   0x20000,  2M,
+ota_1,     app,  ota_1,   0x220000, 2M,
+prod_data, data, 0x40,    0x420000, 0x1000,
+prod_bak,  data, 0x41,    0x421000, 0x1000,

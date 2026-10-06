@@ -1,0 +1,29 @@
+# ESP-IDF build artifacts
+build*/
+sdkconfig
+sdkconfig.old
+
+# SDK token - NEVER commit your mgst_ token
+# Set it via: idf.py menuconfig (Gadget SDK Token)
+# or: echo 'CONFIG_GADGET_SDK_TOKEN="mgst_..."' >> build/sdkconfig
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
+
+# Factory binaries (may contain your SDK token)
+*-factory.bin
+*.bin
+
+# ESP-IDF managed components (fetched via idf.py)
+/managed_components/

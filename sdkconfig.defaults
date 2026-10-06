@@ -1,0 +1,195 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default target: ESP32-C5 (RISC-V, Wi-Fi 6), the chip in Muse Home Link.
+# Board overlays in devices/ select other targets.
+CONFIG_IDF_TARGET="esp32c5"
+CONFIG_ESP32C5_REV_MAX_FULL=199
+# C5 max CPU is 240 MHz.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# Public builds use the ESP32-C5 DevKitC-1 addressable status LED on GPIO27.
+CONFIG_HOMEHUB_LED_BACKEND_DEVKIT_GPIO27=y
+# The DevKitC-1 BOOT button is the active-low setup/reset input on GPIO28.
+CONFIG_HOMEHUB_BUTTON_GPIO=28
+
+# Public builds do not accept OTA updates unless explicitly enabled.
+CONFIG_HOMEHUB_OTA_ENABLED=n
+
+# Private support reports are submitted as attachments through the existing
+# authenticated support path and never exposed in user-visible chat.
+CONFIG_HOMEHUB_SUPPORT_BUG_REPORT=y
+
+# Optimize for performance (-O2). The default is debug (-Og) which
+# leaves significant throughput on the table for TLS, lwIP, and the
+# tunnel framing path.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Bound recursive JSON parsing on the 8-12 KB network task stacks.
+CONFIG_CJSON_NESTING_LIMIT=16
+
+# Quad I/O flash at 80 MHz. The C5 has a 32 KB I-cache with no L2 —
+# cache misses go straight to SPI flash, so bus width and clock matter.
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+# Flash: 8 MB (Muse Home Link default). Works unchanged on 16 MB boards
+# (upper 8 MB unused).
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+# 8 MB Quad PSRAM — extra heap for TLS/WS buffers.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+# Reserve 64 KB internal SRAM from the PSRAM fallback allocator. With BLE
+# active (~80 KB NimBLE), the default 32 KB reserve left too little contiguous
+# internal SRAM for HW AES DMA buffers under burst TLS ("esp-aes: Failed to
+# allocate memory").
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
+# Keep GDMA control functions in IRAM. C5 can DMA payloads in PSRAM;
+# AES DMA descriptors still require DMA-capable internal SRAM.
+CONFIG_GDMA_CTRL_FUNC_IN_IRAM=y
+
+# With PSRAM enabled, cache stalls can extend critical sections past the
+# default 300 ms int-WDT window. Espressif's iperf example disables both
+# watchdogs for the same reason.
+CONFIG_ESP_INT_WDT=n
+CONFIG_ESP_TASK_WDT_EN=n
+
+# Custom partition table (dual-OTA: ota_0/ota_1 + otadata for device.ota)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+# Move the partition table from the IDF default 0x8000 to 0x10000. A Secure Boot
+# V2 bootloader (release builds) grows past the 0x6000 ceiling at 0x8000; the
+# table must sit higher. dev and release share this geometry so dev builds
+# exercise the exact production layout — only release burns eFuses. The matching
+# partition offsets are in partitions.csv.
+CONFIG_PARTITION_TABLE_OFFSET=0x10000
+
+# Read board-specific PHY init data from the `phy_init` partition (0x19000)
+# when present. With this off (the IDF default), the partition is ignored and
+# the embedded default is always used.
+CONFIG_ESP_PHY_INIT_DATA_IN_PARTITION=y
+# Blank-partition fallback: if 0x19000 is empty/unverifiable (dev board, or an
+# uncalibrated unit), restore the embedded default into the partition and keep
+# going rather than bootlooping — so Wi-Fi still associates. Standalone public
+# builds use this fallback without requiring a board-specific calibration blob.
+CONFIG_ESP_PHY_DEFAULT_INIT_IF_INVALID=y
+
+# OTA auto-rollback: a freshly-flashed image boots as PENDING_VERIFY and is
+# reverted by the bootloader on the next reset unless the app calls
+# esp_ota_mark_app_valid_cancel_rollback() (see ota_verify_task in app.c).
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# OTA image signing WITHOUT hardware secure boot. The build signs the app with
+# the RSA-3072 key below (Secure Boot v2 app-signing scheme); esp_https_ota
+# verifies the signature on every update, so only images signed by this key can
+# be installed. dev_signing_key.pem is a SHARED DEV KEY checked into the repo —
+# replace it with a secret release key (kept out of git) before shipping.
+CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+CONFIG_SECURE_BOOT_SIGNING_KEY="dev_signing_key.pem"
+
+# Bluetooth: NimBLE host only (smaller than Bluedroid). Needed for first-time
+# provisioning + iOS app pairing.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_EXT_ADV=n
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+
+# TLS: root CA bundle for HTTPS / WSS / OTA.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# TLS record sizes. Outbound was 4 KB but each TLS record carries
+# encrypt/MAC/header overhead — 16 KB records cut that overhead 4x.
+# An ESP32-S3 benchmark measured this as the single biggest TLS
+# throughput lever (5.6 → 15+ Mbit/s). Cost: ~12 KB more PSRAM.
+CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=16384
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=16384
+# DYNAMIC_BUFFER off — its heap path doesn't honor EXTERNAL_MEM_ALLOC, so it
+# fragmented internal SRAM. Static buffers cost ~12 KB/connection but draw from
+# mbedtls_calloc, which is routed through PSRAM below.
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=n
+# Route mbedtls allocations through PSRAM (the 16 KB IN buffer + handshake
+# structures come from the 8 MB external pool; internal SRAM stays free).
+CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC=n
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+
+CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=y
+CONFIG_ESP_TLS_USING_MBEDTLS=y
+
+# Community v5 pairing uses ephemeral ECDH without a manufacturer credential.
+# Release overlays opt into deterministic eFuse ECDSA for official v5 pairing.
+# The production fleet scalar is shared, so deterministic signing is mandatory.
+CONFIG_HOMEHUB_PAIRING_EFUSE_AUTH=n
+CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN=y
+CONFIG_MBEDTLS_ECDSA_DETERMINISTIC=y
+
+# Main task stack (TLS handshake is hungry).
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_VERSION_1=y
+CONFIG_LOG_MODE_TEXT=y
+CONFIG_LOG_COLORS=n
+CONFIG_LOG_TIMESTAMP_SOURCE_RTOS=y
+
+# WiFi: no NVS (we only show visible APs, creds are in our own config store).
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+# WiFi MAC layer: widen the block-ack window to match the AP's addba response;
+# cap TX buffers at 32 to keep DMA-capable internal SRAM free for HW AES during
+# bursts (BLE ~43 KB + WiFi TX was exhausting DMA heap under tunnel traffic).
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_TX_BA_WIN=32
+CONFIG_ESP_WIFI_RX_BA_WIN=32
+
+# L3-over-WS tunnel: lwIP IP forwarding + NAPT so packets arriving on the tunnel
+# netif are source-NAT'd out the WiFi STA. (The thread-safe netifapi_* wrappers
+# tunnel_netif.c uses are always available in ESP-IDF's lwIP — no flag needed.)
+# Bound TCP payload occupancy in internal RAM: 16 KiB in each direction instead
+# of 64 KiB, leaving DMA headroom for AES and WiFi bursts. Per-direction TCP
+# window ceiling is ~16 KiB / RTT (2.62 Mbit/s at 50 ms), before protocol costs.
+# Camera-relevant ceiling: ~2.6 Mbit/s at 50 ms RTT, with lower usable goodput.
+# Keep receive mboxes and IRAM hot paths for throughput. Moving WiFi/lwIP to
+# PSRAM via SPIRAM_TRY_ALLOCATE_WIFI_LWIP needs a separate hardware soak test.
+CONFIG_LWIP_TCP_WND_DEFAULT=16384
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
+CONFIG_LWIP_IP_FORWARD=y
+CONFIG_LWIP_IPV4_NAPT=y
+CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+CONFIG_LWIP_IRAM_OPTIMIZATION=y
+CONFIG_LWIP_EXTRA_IRAM_OPTIMIZATION=y
+# Bypass the tcpip thread on single-core: calling thread grabs a mutex
+# instead of posting + context-switching. Used in Espressif's C5 iperf.
+CONFIG_LWIP_TCPIP_CORE_LOCKING=y
+CONFIG_LWIP_TCPIP_CORE_LOCKING_INPUT=y
+
+# 1 kHz tick for finer scheduling granularity (default 100 Hz = 10 ms).
+CONFIG_FREERTOS_HZ=1000
+
+# Don't abort if PSRAM init fails on first boot (can happen on power-on reset).
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+# Skip PSRAM memtest — intermittent 3/262144 failures on first power-on reset
+# with C5 rev 1.2 cause abort; succeeds on warm reboot. Not worth blocking boot.
+CONFIG_SPIRAM_MEMTEST=n

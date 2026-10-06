@@ -1,0 +1,8 @@
+# Pairing prompt, including the six-digit code.
+face=idle
+paired=false
+ble=advertising
+passkey=123456
+link=pairing
+wifi=no_network
+advance=1200

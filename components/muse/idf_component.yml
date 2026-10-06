@@ -1,0 +1,76 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+dependencies:
+  idf:
+    version: ">=5.5"
+  espressif/cjson: "~1.7"
+  lvgl/lvgl:
+    version: "9.5.0"
+    public: true
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} != \"none\""
+  espressif/esp_codec_dev:
+    version: "~1.5"
+    public: true
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} != \"none\""
+  espressif/esp_lvgl_adapter:
+    version: "0.6.4"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} in [\"waveshare_s3_175c\", \"waveshare_s3_175\", \"aipi\", \"m5stack_cardputer_adv\", \"sensecap_watcher\", \"m5stack_sticks3\", \"m5stack_stickc_plus2\", \"m5stack_stopwatch\", \"fnk0104b\"]"
+  espressif/esp_lcd_ili9341:
+    version: "^2.1.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"fnk0104b\""
+  waveshare/esp32_s3_touch_amoled_1_75c:
+    version: "^3.0.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"waveshare_s3_175c\""
+  waveshare/esp32_s3_touch_amoled_1_75:
+    version: "^3.0.1"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"waveshare_s3_175\""
+  espressif/esp-box-3:
+    version: "3.2.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"espressif_box_3\""
+  espressif/m5stack_core_s3:
+    version: "4.1.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"m5stack_cores3\""
+  waveshare/esp32_c6_touch_amoled_1_8:
+    version: "^1.0.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"waveshare_c6_18\""
+  espressif/esp_lcd_spd2010:
+    version: "^2.0.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"sensecap_watcher\""
+  espressif/esp_lcd_touch_spd2010:
+    version: "^2.0.1"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"sensecap_watcher\""
+  espressif/esp_lcd_co5300:
+    version: "^2.2.0"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"m5stack_stopwatch\""
+  espressif/m5stack_core_2:
+    version: "^3.0.3"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"m5stack_core2\""
+  espressif/esp_lcd_axs15231b:
+    version: "^2.1.1"
+    rules:
+      - if: "$CONFIG{MUSE_BOARD_ID} == \"guition_jc3248w535\""

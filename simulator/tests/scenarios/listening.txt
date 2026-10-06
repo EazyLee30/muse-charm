@@ -1,0 +1,8 @@
+# Active microphone meter and recording progress.
+face=listening
+caption=Listening on the simulator
+level=0.78
+progress=0.42
+wifi=connected
+paired=true
+advance=1200

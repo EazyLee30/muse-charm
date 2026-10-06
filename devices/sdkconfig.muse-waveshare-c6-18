@@ -1,0 +1,51 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Waveshare ESP32-C6-Touch-AMOLED-1.8: single core, 16 MB flash, no PSRAM.
+# Load last, after sdkconfig.muse. Without PSRAM Muse has no Hatch session of
+# its own (MUSE_HATCH defaults off): voice notes go over Link's session and
+# replies show as text. Link's TLS, Wi-Fi and BLE buffers are trimmed to fit
+# internal RAM.
+CONFIG_IDF_TARGET="esp32c6"
+CONFIG_MUSE_BOARD_WAVESHARE_C6_18=y
+CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=1
+
+CONFIG_SPIRAM=n
+CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC=y
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=n
+# Servers may still send 16 KB records, so only shrink outbound.
+CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=4096
+# With BLE up during pairing the largest free block is ~14 KB, too small for
+# the fixed 16 KB input buffer. Dynamic buffers are sized to each record and
+# freed after the handshake. (The fragmentation that keeps them off elsewhere
+# is about PSRAM routing, and there is none here.)
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
+
+# The home-network tunnel and discovery need ~60 KB more internal RAM than the
+# control session; without them the status turns green once that is up.
+CONFIG_HOMEHUB_TUNNEL=n
+
+# Fewer Wi-Fi TX buffers and lwIP mailboxes than the S3 boards.
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
+CONFIG_LWIP_TCP_RECVMBOX_SIZE=32
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=32
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=32
+
+# One phone at a time, a handful of notifications in flight: half the NimBLE
+# pools gives the pairing TLS handshake back ~9 KB.
+CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=12
+CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=12
+CONFIG_BT_NIMBLE_TRANSPORT_ACL_FROM_LL_COUNT=12
+CONFIG_BT_NIMBLE_TRANSPORT_EVT_COUNT=15

@@ -1,0 +1,341 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+menu "ESP32 Device SDK"
+
+    config GADGET_PRODUCT_NAME
+        string "Human-visible product name for log messages"
+        default "Muse Gadget"
+        help
+            The product name shown in boot banners, log messages, and
+            diagnostic text. Does not affect protocol identifiers or
+            backend strings. Internal builds override this to match
+            the shipping product name.
+
+    config GADGET_SDK_TOKEN
+        string "Muse Gadgets SDK token"
+        default ""
+        help
+            Your mgst_ SDK token from gadgets.muse.ai (Account > SDK tokens).
+            Every gadget needs one to pair. The device hands it to the Muse
+            app inside the encrypted pairing session and includes it when it
+            refreshes its device token.
+
+    config HOMEHUB_WIFI_SSID
+        string "WiFi SSID override (dev iteration)"
+        default ""
+        help
+            If non-empty, the firmware connects to this SSID at boot
+            without waiting for a BLE provisioning command. Useful for
+            iterating on tunnel throughput without re-pairing each flash.
+            BLE still follows setup state: it only advertises when setup is
+            incomplete. If no device token pair is in NVS, the tunnel stays
+            down and the device waits for BLE provisioning.
+
+    config HOMEHUB_WIFI_PASSWORD
+        string "WiFi password override"
+        default ""
+        help
+            Password for CONFIG_HOMEHUB_WIFI_SSID. Ignored when the SSID
+            override is empty.
+
+    config HOMEHUB_TOKEN_REFRESH_INTERVAL_DAYS
+        int "Proactive device token refresh interval (days, 0 = disabled)"
+        range 0 365
+        default 30
+        help
+            Safety net against the access token's real lifetime being shorter
+            than the 365 days the API service advertises. Normal operation refreshes
+            reactively, only when a token is refused; this adds a slow periodic
+            refresh on top.
+
+            Measured against UPTIME, not the calendar — the device has no clock
+            and NVS here stores strings only. A device that reboots more often
+            than this interval never triggers it, which is fine: every boot
+            re-validates the token via fetch_vms and a 401 there drives the
+            reactive path. This exists for devices that stay up for months.
+
+            Each refresh is one call to the endpoint that can mint unusable
+            tokens after an idle period, so keep this long. Set 0 to disable.
+
+    config HOMEHUB_OTA_ENABLED
+        bool "Enable OTA firmware updates"
+        default n
+        help
+            Allow firmware updates over authenticated control and BLE setup.
+            When disabled, OTA commands are not advertised and update requests
+            are skipped without downloading, even when force is requested.
+            Optional OTA parameters in Wi-Fi setup are ignored so provisioning
+            can finish normally. Internal builds enable this explicitly.
+
+    config HOMEHUB_SUPPORT_BUG_REPORT
+        bool "Enable private support bug reporting"
+        default n
+        help
+            Accept the private bug.report command over authenticated remote
+            control. Do not advertise it in generic node.register commands.
+            The report can contain restricted support PII from the bounded
+            current-boot application log, but never credentials,
+            keys, signed URL queries, or arbitrary response bodies.
+            The dedicated support path forwards the opaque JSON through the
+            configured report endpoint as a private attachment
+            and suppresses the payload from user-visible chat. Supported
+            profiles enable this explicitly; the Kconfig fallback remains off
+            for custom builds that bypass the supported sdkconfig defaults.
+
+    config HOMEHUB_SHOW_AGENT_NAME
+        bool "Show the agent's name on the display"
+        default y if HOMEHUB_DISPLAY
+        help
+            After the device registers, fetch GET /identity over the Noise
+            session and show the agent's name on the status display. Only
+            display backends can show it, so it is off for LED-only builds.
+
+    config HOMEHUB_TUNNEL
+        bool "Enable the home-network tunnel and network discovery"
+        default y
+        help
+            Open the /link-tunnel data-plane stream on the Noise session, bring
+            up the NAPT tunnel netif, and accept device.discover. Together they
+            need roughly 60 KB of internal RAM beyond the control session, plus
+            up to 256 KB for discovery results, so boards without PSRAM (e.g.
+            the classic ESP32) should disable this. The control API to the VM
+            keeps working; the status turns green once the control session is up.
+
+    config HOMEHUB_DEV_BUILD
+        bool "Dev build (dev signing key + dev-only affordances)"
+        default y
+        help
+            Marks this as a development build. Default y, so a plain
+            `idf.py build` is a dev build signed with the committed
+            dev_signing_key.pem. Internal release builds set this to n and
+            point signing at the secret release key.
+            Firmware can branch on it with `#if CONFIG_HOMEHUB_DEV_BUILD`.
+            Dev builds may log sensitive support details such as network
+            identifiers and VM metadata. They must never log credentials,
+            authorization headers, signed URL query parameters, private keys,
+            or arbitrary response bodies.
+
+    config HOMEHUB_BLE_NAME_PREFIX
+        string "Visible BLE name prefix"
+        default "MuseGadget"
+        help
+            The device advertises as "<prefix><suffix>-XXXXXX", where XXXXXX
+            is the last three Wi-Fi STA MAC octets. Keep prefix and suffix
+            together at most 22 characters so the name fits the BLE scan
+            response. The backend node_id ("homelink-XXXXXX") does not change.
+
+    config HOMEHUB_BLE_NAME_SUFFIX
+        string "Visible BLE name suffix"
+        default ""
+        help
+            Appended to HOMEHUB_BLE_NAME_PREFIX. Bench boards set one, such as
+            "-Disp", so they are easy to tell apart while keeping the build's
+            prefix: MuseGadget-Disp in the open-source build, HomeLink-Disp in
+            the internal one.
+
+    config HOMEHUB_BUTTON_GPIO
+        int "Active-low setup/reset button GPIO"
+        range 0 28 if IDF_TARGET_ESP32C5
+        range 0 48
+        default 28 if IDF_TARGET_ESP32C5
+        default 41
+        help
+            GPIO connected to the button, independently of the status LED.
+            Uses an internal pull-up and treats a low level as pressed.
+            Muse Home Link and the ESP32-C5 DevKitC-1 BOOT button both use GPIO28.
+
+    choice HOMEHUB_LED_BACKEND
+        prompt "Status LED hardware"
+        default HOMEHUB_LED_BACKEND_PWM_RGB
+        help
+            Select the physical status LED implementation for this build. The
+            Muse Home Link board uses a 3-channel PWM RGB LED. A stock
+            ESP32-C5 DevKitC-1 has a single addressable RGB LED on GPIO27;
+            other boards with one set HOMEHUB_LED_STRIP_GPIO.
+            The always-on red power LED on the DevKitC-1 is not firmware
+            controlled. The ideaspark ESP32 board and the SenseCAP Indicator
+            have no status LED; their displays show the status colour in bars
+            along the top and bottom edges, with an animation in between. The
+            Home Assistant Voice PE shows the status colour on its LED ring.
+            Seeed reSpeaker Lite shows it on a single RGB LED.
+            The reTerminal E1001 and E1002 show a still status screen on
+            their e-paper instead (black and white on the E1001, six colours
+            on the E1002).
+            Boards with the full UI have no status LED; their screen shows Link's pairing
+            and connection state instead.
+
+        config HOMEHUB_LED_BACKEND_PWM_RGB
+            bool "Muse Home Link PWM RGB LED"
+
+        config HOMEHUB_LED_BACKEND_DEVKIT_GPIO27
+            bool "Addressable RGB LED (ESP32-C5 DevKitC-1 GPIO27 by default)"
+
+        config HOMEHUB_LED_BACKEND_IDEASPARK_ST7789
+            bool "ideaspark ESP32 1.9 inch ST7789 display (status bars)"
+
+        config HOMEHUB_LED_BACKEND_WAVESHARE_C6_ST7789
+            bool "Waveshare ESP32-C6-LCD-1.47 inch ST7789 display (status bars)"
+            depends on IDF_TARGET_ESP32C6
+
+        config HOMEHUB_LED_BACKEND_SENSECAP_ST7701
+            bool "SenseCAP Indicator 4 inch ST7701S RGB display (status bars)"
+            depends on IDF_TARGET_ESP32S3 && SPIRAM
+
+        config HOMEHUB_LED_BACKEND_RETERMINAL_UC8179
+            bool "reTerminal E1001 7.5 inch UC8179 e-paper (status screen)"
+            depends on IDF_TARGET_ESP32S3 && SPIRAM
+
+        config HOMEHUB_LED_BACKEND_RETERMINAL_SPECTRA6
+            bool "reTerminal E1002 7.3 inch Spectra 6 colour e-paper (status screen)"
+            depends on IDF_TARGET_ESP32S3 && SPIRAM
+
+        config HOMEHUB_LED_BACKEND_VOICE_RING
+            bool "Home Assistant Voice PE 12-LED ring"
+            depends on IDF_TARGET_ESP32S3
+
+        config HOMEHUB_LED_BACKEND_RESPEAKER_LITE
+            bool "Seeed reSpeaker Lite single RGB LED (experimental)"
+            depends on IDF_TARGET_ESP32S3
+
+        config HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+            bool "Waveshare ESP32-S3-RLCD-4.2 ST7305 reflective mono LCD (status screen)"
+            depends on IDF_TARGET_ESP32S3
+
+        config HOMEHUB_LED_BACKEND_MUSE
+            bool "Muse display"
+            depends on MUSE_ENABLED
+
+        config HOMEHUB_LED_BACKEND_NONE
+            bool "No status LED"
+    endchoice
+
+    config HOMEHUB_LED_RGB_ORDER
+        bool "Addressable LED takes red first (RGB order)"
+        depends on HOMEHUB_LED_BACKEND_DEVKIT_GPIO27
+        default y
+        help
+            The LED on Espressif's ESP32-C5 DevKitC-1 (ESP32-C5-WROOM-1) takes
+            red first, unlike the usual WS2812 green first (GRB). Turn this
+            off if your board shows green as red and amber as green.
+
+    config HOMEHUB_LED_STRIP_GPIO
+        int "Addressable LED data GPIO"
+        depends on HOMEHUB_LED_BACKEND_DEVKIT_GPIO27
+        range 0 28 if IDF_TARGET_ESP32C5
+        range 0 48
+        default 27
+        help
+            GPIO driving the single addressable status LED. The ESP32-C5
+            DevKitC-1 uses GPIO27. The build stops if the pin is one the chip
+            uses for its SPI flash or PSRAM.
+
+    config HOMEHUB_DISPLAY
+        bool
+        default y if HOMEHUB_LED_BACKEND_IDEASPARK_ST7789
+        default y if HOMEHUB_LED_BACKEND_WAVESHARE_C6_ST7789
+        default y if HOMEHUB_LED_BACKEND_SENSECAP_ST7701
+        default y if HOMEHUB_LED_BACKEND_RETERMINAL_UC8179
+        default y if HOMEHUB_LED_BACKEND_RETERMINAL_SPECTRA6
+        default y if HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        help
+            Set for backends with a display: the status bars, animation and
+            agent name (a still status screen on e-paper), and the display.*
+            commands.
+
+    config HOMEHUB_VOICE
+        bool "Push-to-talk voice chat"
+        depends on (HOMEHUB_LED_BACKEND_VOICE_RING || HOMEHUB_LED_BACKEND_RESPEAKER_LITE || HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305) && SPIRAM
+        default y
+        help
+            Hold the centre button (XIAO BOOT on reSpeaker Lite), speak,
+            release: the audio goes to the agent's chat as a voice note,
+            which the VM transcribes, and the
+            reply appears in the Muse app as text. To speak it, plug a TTS
+            API of your own into start_tts in muse_chat_session.cpp. This
+            uses a second Noise session (Muse's voice session) with Link's
+            account. While the mute
+            switch is on, the button keeps its setup role (tap to confirm
+            pairing, hold to reset).
+
+    config HOMEHUB_SENSECAP_SENSORS
+        bool "SenseCAP Indicator air sensors (sensors.read)"
+        depends on HOMEHUB_LED_BACKEND_SENSECAP_ST7701
+        default y
+        help
+            Read the sensors the RP2040 reports over UART (GPIO 19/20) and
+            answer sensors.read with the latest CO2, tVOC, temperature and
+            humidity. The D1S and D1Pro have CO2 and tVOC built in;
+            temperature and humidity need the Grove AHT20. Needs Seeed's stock
+            RP2040 firmware.
+
+    config HOMEHUB_DISPLAY_COMMANDS
+        bool
+        default y if HOMEHUB_DISPLAY
+        default y if HOMEHUB_LED_BACKEND_MUSE && SPIRAM
+        help
+            Set when display.draw_url can draw a downloaded image: the
+            display backends, and boards with the full UI and PSRAM for the image.
+
+    config HOMEHUB_PRE_DVT_GPIO
+        bool "Use pre-DVT GPIO assignments"
+        depends on HOMEHUB_LED_BACKEND_PWM_RGB
+        default n
+        help
+            Select pre-DVT RGB LED pin mapping (R=24, G=25, B=26).
+            DVT boards use R=2, G=3, B=6.
+
+    config HOMEHUB_NVS_ENCRYPTION
+        bool "Encrypt NVS with an HMAC-derived key"
+        default n
+        select NVS_ENCRYPTION
+        select NVS_SEC_KEY_PROTECT_USING_HMAC
+        help
+            Encrypt the NVS partition using an HMAC key from eFuse block
+            NVS_SEC_HMAC_EFUSE_KEY_ID (set in the NVS component menu). At
+            first boot, if the chosen block is empty and read-protection can
+            still be set, the application generates a key automatically.
+            Boards with no HMAC key and a locked eFuse fall back to plaintext
+            NVS. When this option is off, NVS is always plaintext regardless
+            of eFuse state.
+
+    config HOMEHUB_PAIRING_EFUSE_AUTH
+        bool "Enable manufacturer eFuse pairing attestation"
+        default n
+        help
+            Enable official v5 pairing with a protected manufacturer P-256 key.
+            Requires hardware Secure Boot. An exactly unused key block selects
+            explicit community v5 pairing; any malformed or unusable key fails
+            closed. With this off, all pairing is community v5 with fresh ECDH
+            encryption and physical confirmation but no manufacturer proof.
+
+    config HOMEHUB_PAIRING_AUTH_EPOCH
+        int "Manufacturer pairing public-key epoch"
+        range 1 1
+        default 1
+        help
+            Public-key epoch for official eFuse attestation only. Community
+            pairing always advertises epoch zero and has no manufacturer key.
+
+    config HOMEHUB_PAIRING_ECDSA_EFUSE_BLOCK
+        int "Manufacturer pairing ECDSA eFuse key block"
+        depends on HOMEHUB_PAIRING_EFUSE_AUTH
+        default 6
+        help
+            The esp_efuse_block_t value of the read/write-protected ECDSA key:
+            EFUSE_BLK_KEY0=4, KEY1=5, KEY2=6, ... KEY5=9.
+            Manufacturing provisions the pairing key in KEY2 before Secure Boot
+            locks read protection. No shared software attestation key is used.
+
+endmenu

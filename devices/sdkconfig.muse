@@ -1,0 +1,93 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Boards with the full UI: Home Link plus the avatar, voice and settings UI
+# (components/muse). Load after sdkconfig.defaults, then one board overlay:
+# sdkconfig.muse-waveshare-s3-175c, sdkconfig.muse-aipi,
+# sdkconfig.muse-waveshare-c6-18, sdkconfig.muse-sensecap-watcher,
+# sdkconfig.muse-espressif-box-3, sdkconfig.muse-m5stack-sticks3,
+# sdkconfig.muse-m5stack-stopwatch, sdkconfig.muse-m5stack-cores3,
+# sdkconfig.muse-m5stack-stickc-plus2 or sdkconfig.muse-guition-jc3248w535.
+# Link owns Wi-Fi, BLE pairing, credentials and OTA; the display shows Link's
+# status instead of a status LED.
+CONFIG_HOMEHUB_LED_BACKEND_MUSE=y
+# These boards pair in community mode (no factory key). The Hatch app lists
+# community devices by this name, and only with hatch_link.community_devices on.
+CONFIG_HOMEHUB_BLE_NAME_PREFIX="MuseGadget"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_muse.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+# These boards ship Link with OTA on.
+CONFIG_HOMEHUB_OTA_ENABLED=y
+# The display, audio and BLE leave little internal RAM, and Link still needs
+# internal task stacks once Wi-Fi is up. Send small allocations to PSRAM too.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+
+# LVGL avatar and settings UI.
+CONFIG_LV_OS_FREERTOS=y
+CONFIG_LV_USE_CUSTOM_MALLOC=y
+CONFIG_LV_USE_CLIB_STRING=y
+CONFIG_LV_USE_CLIB_SPRINTF=y
+CONFIG_LV_DEF_REFR_PERIOD=15
+CONFIG_LV_OBJ_STYLE_CACHE=y
+CONFIG_LV_FONT_UNSCII_8=y
+CONFIG_LV_FONT_UNSCII_16=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_DEFAULT_MONTSERRAT_20=y
+CONFIG_LV_THEME_DEFAULT_DARK=y
+# Print LVGL's warnings to the console, including the expression of a failed
+# assert just before components/muse/CMakeLists.txt's handler aborts.
+CONFIG_LV_USE_LOG=y
+CONFIG_LV_LOG_LEVEL_WARN=y
+CONFIG_LV_LOG_PRINTF=y
+
+# NimBLE: Link's pairing service and Muse's phone setup service share one
+# connection. Bonds persist so the phone setup passkey is asked once.
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=256
+
+# Muse's Hatch client derives its Noise keys with HKDF.
+CONFIG_MBEDTLS_HKDF_C=y
+
+# The display, touch and audio drivers need DMA-capable internal RAM, which
+# Link's C5 tuning spends on Wi-Fi speed. Keep Wi-Fi/lwIP hot paths in flash
+# (on the S3 and C6, IRAM comes out of the same SRAM) and hold fewer resident
+# Wi-Fi RX buffers; the RX block-ack window may be at most twice that count.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_LWIP_IRAM_OPTIMIZATION=n
+CONFIG_LWIP_EXTRA_IRAM_OPTIMIZATION=n
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_RX_BA_WIN=16
+CONFIG_ESP_WIFI_TX_BA_WIN=16
+
+# These boards carry no board-specific PHY calibration blob; use the embedded
+# default like the stock Muse firmware.
+CONFIG_ESP_PHY_INIT_DATA_IN_PARTITION=n
+
+# TLS in software AES: hardware AES bounces PSRAM records through DMA-capable
+# internal RAM, which Wi-Fi TX takes during uploads ("esp-aes: Failed to
+# allocate memory"). Software AES is fast enough for these streams.
+CONFIG_MBEDTLS_HARDWARE_AES=n
+
+# Waking from a Wi-Fi nap rejoins, and the DHCP client's two ARP probes held
+# each new lease back a second before binding it. The router has already
+# checked the address it offers.
+CONFIG_LWIP_DHCP_DOES_NOT_CHECK_OFFERED_IP=y

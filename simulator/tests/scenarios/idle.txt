@@ -1,0 +1,10 @@
+# Connected and waiting for a turn.
+face=idle
+caption=
+wifi=connected
+ble=connected
+paired=true
+battery=72
+battery_mv=3970
+usb=true
+advance=1200

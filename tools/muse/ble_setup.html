@@ -1,0 +1,237 @@
+<!doctype html>
+<!--
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!--
+  Muse phone setup over Bluetooth LE (Web Bluetooth).
+
+  1. On Muse: swipe left > Bluetooth > turn on "Phone setup" (no-touch boards:
+     menu button > Phone setup).
+  2. Serve this folder and open it in Chrome (desktop or Android):
+       cd tools/muse && python3 -m http.server 8000   ->  http://localhost:8000/ble_setup.html
+     Web Bluetooth needs https or localhost. iOS Safari lacks Web Bluetooth;
+     use the Bluefy browser there.
+  3. Connect, then enter the 6-digit code Muse shows when your OS asks to pair.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muse setup</title>
+<style>
+  :root { --bg:#0b0816; --card:#1a1530; --accent:#a77dff; --text:#f2efff; --dim:#8b84a8; --ok:#6ff0bf; --bad:#ff5c5c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 system-ui, sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin:0 0 12px; }
+  p.dim, .dim { color:var(--dim); font-size:14px; }
+  section { background:var(--card); border-radius:18px; padding:16px; margin:16px 0; }
+  label { display:block; font-size:14px; color:var(--dim); margin:10px 0 4px; }
+  input[type=text], input[type=password], select {
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid #3a3358;
+    background:#120e22; color:var(--text); font-size:16px;
+  }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  button {
+    background:var(--accent); color:#140f22; border:0; border-radius:12px; padding:10px 16px;
+    font-size:16px; font-weight:600; margin:12px 8px 0 0; cursor:pointer;
+  }
+  button.secondary { background:#2e2552; color:var(--text); }
+  button:disabled { opacity:.4; cursor:default; }
+  .row { display:flex; justify-content:space-between; gap:12px; }
+  #log { font:13px/1.5 ui-monospace, monospace; white-space:pre-wrap; color:var(--dim); max-height:180px; overflow:auto; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  fieldset { border:0; padding:0; margin:0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Muse setup</h1>
+  <p class="dim">Turn on <b>Settings &rsaquo; Bluetooth &rsaquo; Phone setup</b> on Muse, then connect.
+     When asked to pair, type the code shown on Muse's screen.</p>
+
+  <section>
+    <div class="row"><h2 style="margin:0">Device</h2><span id="conn" class="dim">Not connected</span></div>
+    <button id="connect">Connect</button>
+    <button id="disconnect" class="secondary" disabled>Disconnect</button>
+    <div id="status" class="dim" style="margin-top:12px"></div>
+  </section>
+
+  <fieldset id="controls" disabled>
+    <section>
+      <h2>Wi-Fi</h2>
+      <label for="ssid">Network name</label>
+      <input id="ssid" type="text" autocomplete="off" maxlength="32">
+      <label for="pass">Password</label>
+      <input id="pass" type="password" autocomplete="off" maxlength="64">
+      <button id="wifi-join">Join</button>
+      <button id="wifi-forget" class="secondary">Forget all networks</button>
+    </section>
+
+    <section>
+      <h2>Muse</h2>
+      <label for="host">Server</label>
+      <input id="host" type="text" autocomplete="off" maxlength="63" placeholder="Leave empty for the default">
+      <label for="vm">VM ID <span class="dim">(optional; defaults to your default VM)</span></label>
+      <input id="vm" type="text" autocomplete="off" maxlength="63">
+      <label for="token">Device token <span class="dim">(leave empty to keep the current one)</span></label>
+      <input id="token" type="password" autocomplete="off" maxlength="1023">
+      <button id="hatch-save">Save</button>
+      <button id="hatch-test" class="secondary">Test connection</button>
+    </section>
+
+    <section>
+      <h2>Sound &amp; sleep</h2>
+      <label>Volume <span id="volume-v"></span></label>
+      <input id="volume" type="range" min="0" max="100">
+      <label><input id="speaker" type="checkbox"> Speaker <span class="dim">(off: replies are shown, not played)</span></label>
+      <label>Mic gain <span id="mic-v"></span></label>
+      <input id="mic" type="range" min="0" max="36" step="3">
+      <label>Brightness <span id="bright-v"></span></label>
+      <input id="bright" type="range" min="10" max="100">
+      <label for="sleep">Auto-sleep</label>
+      <select id="sleep">
+        <option value="0">Never</option><option value="30">30 seconds</option><option value="60">1 minute</option>
+        <option value="120">2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option>
+      </select>
+    </section>
+  </fieldset>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+const SVC    = '4d757365-0001-4000-8000-6a6f6c6c7900';
+const CMD    = '4d757365-0002-4000-8000-6a6f6c6c7900';
+const STATUS = '4d757365-0003-4000-8000-6a6f6c6c7900';
+const TOKEN_CHUNK = 180;   // stays well under the 512-byte attribute limit
+
+const $ = id => document.getElementById(id);
+let device, cmdChar, statusChar, queue = Promise.resolve();
+
+function log(msg, cls) {
+  const line = document.createElement('div');
+  line.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  if (cls) line.className = cls;
+  $('log').prepend(line);
+}
+
+// Commands are serialized: each write waits for the previous one's response.
+function send(cmd, value = '') {
+  queue = queue.then(async () => {
+    await cmdChar.writeValueWithResponse(new TextEncoder().encode(`${cmd}=${value}`));
+  }).catch(e => log(`${cmd} failed: ${e.message}`, 'bad'));
+  return queue;
+}
+
+async function refresh() {
+  const s = JSON.parse(new TextDecoder().decode(await statusChar.readValue()));
+  const w = s.wifi, h = s.hatch;
+  $('conn').textContent = `${s.name} · fw ${s.fw}`;
+  $('status').innerHTML =
+    `Wi-Fi: <b>${w.on ? w.state : 'off'}</b>${w.ssid ? ` (${esc(w.ssid)}${w.ip ? `, ${w.ip}` : ''})` : ''}<br>` +
+    `Muse: <b>${esc(h.state)}</b> · token ${h.token ? 'set' : 'not set'}<br>` +
+    (s.battery >= 0 ? `Battery ${s.battery}%` : 'Battery: n/a');
+  if (document.activeElement !== $('ssid') && !$('ssid').value) $('ssid').value = w.ssid;
+  if (document.activeElement !== $('host')) $('host').value = h.host;
+  if (document.activeElement !== $('vm')) $('vm').value = h.vm;
+  setRange('volume', s.volume, v => `${v}%`);
+  $('speaker').checked = s.speaker;
+  setRange('mic', s.mic_gain, v => `${v} dB`);
+  setRange('bright', s.brightness, v => `${v}%`);
+  $('sleep').value = String(s.sleep);
+}
+
+function setRange(id, v, fmt) {
+  if (document.activeElement !== $(id)) $(id).value = v;
+  $(`${id}-v`).textContent = fmt($(id).value);
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`); }
+
+async function connect() {
+  device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'MuseGadget-' }, { namePrefix: 'HomeLink-' }, { namePrefix: 'Muse-' }], optionalServices: [SVC] });
+  device.addEventListener('gattserverdisconnected', () => {
+    log('Disconnected');
+    $('conn').textContent = 'Not connected';
+    $('controls').disabled = true;
+    $('connect').disabled = false;
+    $('disconnect').disabled = true;
+  });
+  log(`Connecting to ${device.name}…`);
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(SVC);
+  cmdChar = await svc.getCharacteristic(CMD);
+  statusChar = await svc.getCharacteristic(STATUS);
+  // The first protected read triggers pairing: enter the code shown on Muse.
+  log('Pairing: enter the code shown on Muse if asked');
+  await refresh();
+  await statusChar.startNotifications();
+  statusChar.addEventListener('characteristicvaluechanged', e => {
+    const msg = new TextDecoder().decode(e.target.value);
+    log(msg, msg.includes('error') ? 'bad' : 'ok');
+    refresh().catch(() => {});
+  });
+  log('Connected', 'ok');
+  $('controls').disabled = false;
+  $('connect').disabled = true;
+  $('disconnect').disabled = false;
+}
+
+$('connect').onclick = () => {
+  if (!navigator.bluetooth) { log('This browser has no Web Bluetooth. Use Chrome (or Bluefy on iOS).', 'bad'); return; }
+  connect().catch(e => log(e.message, 'bad'));
+};
+$('disconnect').onclick = () => device?.gatt.disconnect();
+
+$('wifi-join').onclick = async () => {
+  const ssid = $('ssid').value.trim();
+  if (!ssid) { log('Enter a network name', 'bad'); return; }
+  send('wifi.ssid', ssid);
+  if ($('pass').value) send('wifi.pass', $('pass').value);
+  await send('wifi.connect');
+  $('pass').value = '';
+};
+$('wifi-forget').onclick = () => { $('ssid').value = ''; send('wifi.forget'); };
+
+$('hatch-save').onclick = async () => {
+  send('hatch.host', $('host').value.trim());
+  send('hatch.vm', $('vm').value.trim());
+  const token = $('token').value.trim();
+  for (let i = 0; i < token.length; i += TOKEN_CHUNK) {
+    send(i ? 'hatch.token+' : 'hatch.token', token.slice(i, i + TOKEN_CHUNK));
+  }
+  await queue;
+  $('token').value = '';
+};
+$('hatch-test').onclick = () => send('hatch.test');
+
+for (const [id, cmd, fmt] of [['volume', 'volume', v => `${v}%`], ['mic', 'mic_gain', v => `${v} dB`],
+                              ['bright', 'brightness', v => `${v}%`]]) {
+  $(id).oninput = () => { $(`${id}-v`).textContent = fmt($(id).value); };
+  $(id).onchange = () => send(cmd, $(id).value);
+}
+$('speaker').onchange = () => send('speaker', $('speaker').checked ? 1 : 0);
+$('sleep').onchange = () => send('sleep', $('sleep').value);
+
+// Keep Wi-Fi/Muse state fresh while connected.
+setInterval(() => { if (device?.gatt.connected && !$('controls').disabled) refresh().catch(() => {}); }, 3000);
+</script>
+</body>
+</html>

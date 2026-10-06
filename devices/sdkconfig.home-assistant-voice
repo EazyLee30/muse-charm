@@ -1,0 +1,54 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Home Assistant Voice Preview Edition (Seeed/Nabu Casa): ESP32-S3 with 8 MB
+# octal PSRAM, 16 MB flash, an XMOS XU316 audio front end (two-mic array,
+# echo cancellation), an AIC3204 codec and speaker amp, a 12-LED ring, the
+# centre button, a rotary dial and a mute switch. The console is the S3's
+# USB-Serial-JTAG. Load last, after sdkconfig.defaults (see README.md in this
+# directory).
+#
+# It overrides the ESP32-C5 assumptions in sdkconfig.defaults; C5-only options
+# there are ignored for this target. Flashing replaces the vendor firmware; the
+# XMOS keeps its own firmware and is never reflashed.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# The LED ring shows the status colours; push-to-talk voice chat is on.
+CONFIG_HOMEHUB_LED_BACKEND_VOICE_RING=y
+CONFIG_HOMEHUB_VOICE=y
+# Advertise as <prefix>-ha-voice-XXXXXX to tell this board apart from real
+# devices: MuseGadget-ha-voice in the open-source build, HomeLink-ha-voice in the
+# internal one.
+CONFIG_HOMEHUB_BLE_NAME_SUFFIX="-ha-voice"
+# The centre button (pressing the dial), active low.
+CONFIG_HOMEHUB_BUTTON_GPIO=0
+
+# 16 MB flash, dual I/O as in the vendor firmware.
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# Octal PSRAM holds the audio buffers.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_MODE_QUAD=n
+CONFIG_SPIRAM_SPEED_80M=y
+
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# The BLE controller already takes ~70 KB of internal RAM on the S3; keep the
+# NimBLE host's allocations in PSRAM so pairing has room.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
