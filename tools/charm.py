@@ -19,8 +19,8 @@ def main():
     a=p.parse_args();params={};prefix='@charm '
     if a.action=='tts-setup':
         private=json.loads(a.private_json_file.read_text());key=private.get('key','')
-        if not key or len(key)>=256: p.error('private JSON needs a key shorter than 256 bytes')
-        command='tts.setup='+json.dumps({'key':key});prefix='@tts '
+        if not key or len(key)>=1536: p.error('private JSON needs a key shorter than 1536 bytes')
+        command='tts.setup='+json.dumps({k:private[k] for k in ['key','provider','model','voice'] if k in private});prefix='@tts '
     elif a.action=='configure':
         params={k:getattr(a,k) for k in ['mode','reaction','location','rotate','timezone'] if getattr(a,k) is not None};command='charm.configure='+json.dumps(params,ensure_ascii=False)
     elif a.action=='speak':command='charm.speak='+json.dumps({'text':a.text},ensure_ascii=False)
@@ -32,7 +32,7 @@ def main():
         params={'action':'stop'} if a.stop else ({'path':a.source} if not a.source.startswith(('http://','https://')) else {'url':a.source})
         command='charm.music='+json.dumps(params,ensure_ascii=False)
     else:command='charm.status'
-    if len(command.encode())>=1023:p.error('command exceeds USB line limit')
+    if len(command.encode())>=4095:p.error('command exceeds USB line limit')
     with serial.Serial(a.port,115200,timeout=.2) as s:
         s.write(('>'+command+'\n').encode());deadline=time.monotonic()+15;buffer=b''
         while time.monotonic()<deadline:

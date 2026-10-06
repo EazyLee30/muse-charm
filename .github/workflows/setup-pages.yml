@@ -1,0 +1,33 @@
+name: Publish Muse Charm setup
+on:
+  push:
+    branches: [main]
+    paths: ['tools/setup/**', '.github/workflows/setup-pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/configure-pages@v6.0.0
+      - name: Prepare standalone setup page
+        run: |
+          mkdir -p _site
+          cp tools/setup/index.html _site/index.html
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: _site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5.0.1

@@ -20,7 +20,7 @@
 #include "driver/usb_serial_jtag_vfs.h"
 
 #define CHAT_MAX (192 * 1024)
-#define RLCD_CONSOLE_LINE_MAX 1024
+#define RLCD_CONSOLE_LINE_MAX 4096
 static char *s_message;
 static size_t s_length;
 
@@ -47,11 +47,14 @@ static void status(void) {
 
 static void command(char *line, bool whole) {
     if (!strcmp(line, "setup.status") && whole) {
-        char key[256] = {0};
-        bool tts = config_get_str("tts_key", key, sizeof(key)) && key[0];
-        memset(key, 0, sizeof(key));
-        printf("@setup {\"ok\":true,\"board\":\"waveshare-s3-rlcd42\",\"protocol\":1,\"sdk_configured\":%s,\"tts_configured\":%s}\n",
-               identity_sdk_token() ? "true" : "false", tts ? "true" : "false");
+        char provider[24],model[48],voice[128];
+        bool tts=muse_tts_settings(provider,sizeof(provider),model,sizeof(model),voice,sizeof(voice));
+        cJSON *root=cJSON_CreateObject();
+        cJSON_AddBoolToObject(root,"ok",true);cJSON_AddStringToObject(root,"board","waveshare-s3-rlcd42");
+        cJSON_AddNumberToObject(root,"protocol",2);cJSON_AddBoolToObject(root,"sdk_configured",identity_sdk_token()!=NULL);
+        cJSON_AddBoolToObject(root,"tts_configured",tts);cJSON_AddStringToObject(root,"tts_provider",provider);
+        cJSON_AddStringToObject(root,"tts_model",model);cJSON_AddStringToObject(root,"tts_voice",voice);
+        char *json=cJSON_PrintUnformatted(root);if(json) {printf("@setup %s\n",json);free(json);}cJSON_Delete(root);
         fflush(stdout); return;
     }
     if (whole && !strncmp(line, "sdk.setup=", 10)) {
@@ -71,7 +74,9 @@ static void command(char *line, bool whole) {
     if (whole && !strncmp(line,"tts.setup=",10)) {
         cJSON *root=cJSON_Parse(line+10);
         const char *key=cJSON_GetStringValue(cJSON_GetObjectItem(root,"key"));
-        bool ok=key && strlen(key)<256 && config_set_str("tts_key",key) && muse_tts_configure(key);
+        bool ok=muse_tts_setup(cJSON_GetStringValue(cJSON_GetObjectItem(root,"provider")),
+            cJSON_GetStringValue(cJSON_GetObjectItem(root,"model")),
+            cJSON_GetStringValue(cJSON_GetObjectItem(root,"voice")),key);
         printf("@tts {\"configured\":%s}\n",ok?"true":"false");fflush(stdout);
         if (key) memset((char *)key,0,strlen(key));
         cJSON_Delete(root);memset(line,0,strlen(line));return;

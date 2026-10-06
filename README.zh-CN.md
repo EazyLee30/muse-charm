@@ -97,16 +97,18 @@ voice: longanhuan_v3.6
 format: MP3 / 16000 Hz
 ```
 
-`compatible-mode/v1` 是兼容接口地址，当前 TTS 代码使用上面的原生接口。无 TTS key 时仍可播放 SD/网络 MP3；Muse 的语音播报需要配置 key。SDK token、API key、配对数据和签名私钥均由使用者自行配置，不随仓库提供。
+`compatible-mode/v1` 是兼容接口地址，当前 TTS 代码使用上面的原生接口。无 TTS key 时仍可播放 SD/网络 MP3；Muse 的语音播报需要配置 key。配置页面也支持 MiniMax 中国站/国际站，默认 `speech-2.8-turbo` / `male-qn-qingse`，可选模型及自定义 Voice ID。SDK token、API key、配对数据和签名私钥均由使用者自行配置，不随仓库提供。
 
 ## 🚀 懒人包：不用编译，刷完填写 token
 
+**在线配置：[eazylee.xyz/muse-charm](https://eazylee.xyz/muse-charm/)**。电脑 Chrome/Edge 通过 USB 配置，凭证只发给板子。
+
 ![USB configuration page](docs/charm-setup.png)
 
-下载 [最新 Release](https://github.com/EazyLee30/muse-charm/releases/latest) 的 `muse-charm-v0.8.0-setup.zip`，解压后按 `开始使用.md` 刷入固件，再用电脑 **Chrome/Edge** 打开 `setup/index.html`：
+下载 [最新 Release](https://github.com/EazyLee30/muse-charm/releases/latest) 的 `muse-charm-v0.8.1-setup.zip`，解压后按 `开始使用.md` 刷入固件，再用电脑 **Chrome/Edge** 打开 `setup/index.html`：
 
 1. 点击“连接 USB 设备”，选择 ESP32 USB Serial/JTAG 串口。
-2. 填写自己的 Muse SDK token（gadgets.muse.ai → Account → SDK tokens）。TTS key 可选。
+2. 填写自己的 Muse SDK token（gadgets.muse.ai → Account → SDK tokens）。TTS key 可选，可选择百炼或 MiniMax 中国站/国际站。
 3. 点击“保存并重启”，再到 Muse App 添加设备、确认 BOOT 和选择 Wi-Fi。
 
 SDK token / TTS key 保存到板子 NVS，断电不丢；运行时 SDK token 优先于编译配置。页面只读取是否配置，不读回凭证，不发起网络请求，不写入浏览器存储。页面不会验证服务权限，保存成功后仍需实际配对。已配置的字段留空可保留。
@@ -206,3 +208,5 @@ python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 '你好，看看这台硬
 验证记录：已运行 Charm/UI、音频归属和配对恢复相关主机测试，并在实板确认语音、歌曲播放、四向布局与按键反馈。完整上游测试集在本机的 camera/tunnel 测试程序中未能跑完，不能视为全量通过。另一块完整 UI 板的兼容编译通过，但测试副本需补齐上游两个已有的 `WAITING_FOR_WIFI` switch 分支；该补丁未混入本板改动。
 
 USB 配置验证：已实板确认运行时保存 SDK token、拒绝错误格式、重启持久化及 Muse 连接恢复。页面 JavaScript 的分段 USB 响应、部分保存失败和重启流程测试通过，并检查了 Chrome 页面布局。
+
+MiniMax 使用 [官方同步语音接口](https://platform.minimax.io/docs/api-reference/speech-t2a-http)，请求 16kHz 单声道 MP3 URL；需要对应平台的语音 API key/额度。请求与响应、错误码和 URL 校验测试通过；尚未用真实 MiniMax key 验证付费合成，百炼播报已实板确认。

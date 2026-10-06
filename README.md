@@ -87,12 +87,14 @@ Without a TTS key, local/network MP3 playback still works. Supply your own SDK t
 
 ## 🚀 No-build setup package
 
+**Online setup: [eazylee.xyz/muse-charm](https://eazylee.xyz/muse-charm/)**. Use desktop Chrome/Edge; credentials go directly to your board over USB.
+
 ![USB configuration page](docs/charm-setup.png)
 
-Download `muse-charm-v0.8.0-setup.zip` from the [latest Release](https://github.com/EazyLee30/muse-charm/releases/latest). Follow `开始使用.md` to flash the credential-free firmware, then open `setup/index.html` in desktop **Chrome/Edge**.
+Download `muse-charm-v0.8.1-setup.zip` from the [latest Release](https://github.com/EazyLee30/muse-charm/releases/latest). Follow `开始使用.md` to flash the credential-free firmware, then open `setup/index.html` in desktop **Chrome/Edge**.
 
 1. Connect the ESP32 USB Serial/JTAG port.
-2. Enter your own Muse SDK token from gadgets.muse.ai → Account → SDK tokens; optionally enter a Token Plan TTS key.
+2. Enter your own Muse SDK token from gadgets.muse.ai → Account → SDK tokens; optionally select Ali Token Plan or MiniMax China/global and enter the corresponding key.
 3. Save and restart, then pair in the Muse App and select 2.4GHz Wi-Fi.
 
 Credentials persist in device NVS. Runtime SDK tokens override the optional compile-time token. The page reports configured/not configured without reading back credentials, making network requests, or writing browser storage. Leave configured fields blank to preserve them. Format validation does not verify service authorization.
@@ -172,3 +174,5 @@ Hardware validation uses ESP-IDF 6.0.1, ESP32-S3 v0.2, 16MB flash / 8MB PSRAM. A
 Validation includes focused Charm/UI, audio ownership and pairing recovery host tests, plus hardware voice, music, four orientations and button feedback. The full upstream suite did not finish in its camera/tunnel harnesses on this Mac. A second full-UI board compiled in an isolated test copy after filling two existing upstream `WAITING_FOR_WIFI` switch cases; that workaround is not included in this board change.
 
 USB setup validation: runtime SDK save, invalid-format rejection, reboot persistence and restored Muse connectivity confirmed on the board. The actual page JavaScript passes split-response USB, partial-save and restart tests; Chrome rendering was checked.
+
+MiniMax support uses the [official native synchronous API](https://platform.minimax.io/docs/api-reference/speech-t2a-http), China `api.minimax.cn` or global `api.minimax.io`, default `speech-2.8-turbo` / `male-qn-qingse`, configurable model and Voice ID, 16kHz mono MP3 URL output. Contract/error/URL tests pass; paid synthesis has not been verified without an authorized MiniMax key. Qwen speech is hardware-verified.

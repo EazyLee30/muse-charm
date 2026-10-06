@@ -2656,9 +2656,7 @@ void app_run(void) {
 #if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
     charm_start();
     muse_tts_init();
-    char tts_key[256];
-    if(config_get_str("tts_key",tts_key,sizeof(tts_key))) muse_tts_configure(tts_key);
-    memset(tts_key,0,sizeof(tts_key));
+    muse_tts_load_config();
     extern void rlcd42_console_start(void);
     rlcd42_console_start();
 #endif

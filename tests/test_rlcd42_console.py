@@ -21,14 +21,17 @@ static cJSON *cJSON_GetObjectItem(cJSON *o,const char *s) {(void)o;(void)s;retur
 static const char *cJSON_GetStringValue(cJSON *o) {(void)o;return NULL;}
 static void cJSON_Delete(cJSON *o) {(void)o;}
 static char *cJSON_PrintUnformatted(cJSON *o) {(void)o;return NULL;}
-static bool config_set_str(const char *k,const char *v) {(void)k;(void)v;return false;}
 static const char *identity_sdk_token(void) {return NULL;}
 static bool identity_sdk_token_save(const char *s) {(void)s;return false;}
-static bool config_get_str(const char *k,char *v,size_t n) {(void)k;(void)v;(void)n;return false;}
 static void esp_restart(void) {}
 static void vTaskDelay(int t) {(void)t;}
 #define pdMS_TO_TICKS(x) (x)
-static bool muse_tts_configure(const char *k) {(void)k;return false;}
+static bool muse_tts_settings(char *p,size_t pn,char *m,size_t mn,char *v,size_t vn) {(void)p;(void)pn;(void)m;(void)mn;(void)v;(void)vn;return false;}
+static bool muse_tts_setup(const char *p,const char *m,const char *v,const char *k) {(void)p;(void)m;(void)v;(void)k;return false;}
+static cJSON *cJSON_CreateObject(void) {return NULL;}
+static void cJSON_AddBoolToObject(cJSON *o,const char *k,bool v) {(void)o;(void)k;(void)v;}
+static void cJSON_AddStringToObject(cJSON *o,const char *k,const char *v) {(void)o;(void)k;(void)v;}
+static void cJSON_AddNumberToObject(cJSON *o,const char *k,int v) {(void)o;(void)k;(void)v;}
 static cJSON *charm_command(const char *c,cJSON *p) {(void)c;(void)p;return NULL;}
 #define CHAT_MAX 32
 #define MALLOC_CAP_SPIRAM 1
