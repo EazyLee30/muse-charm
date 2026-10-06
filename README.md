@@ -87,9 +87,9 @@ Without a TTS key, local/network MP3 playback still works. Supply your own SDK t
 
 ## 🚀 No-build setup package
 
-**Online setup: [eazylee.xyz/muse-charm](https://eazylee.xyz/muse-charm/)**. Use desktop Chrome/Edge; credentials go directly to your board over USB.
+**Online setup: [eazylee.xyz/muse-charm](https://eazylee.xyz/muse-charm/)**. Use desktop Chrome/Edge; credentials go directly to your board over USB. The page supports English / 中文, including instructions, provider fields and connection/save messages.
 
-![USB configuration page](docs/charm-setup.png)
+![USB configuration page](docs/charm-setup-en.png)
 
 Download `muse-charm-v0.8.1-setup.zip` from the [latest Release](https://github.com/EazyLee30/muse-charm/releases/latest). Follow `开始使用.md` to flash the credential-free firmware, then open `setup/index.html` in desktop **Chrome/Edge**.
 

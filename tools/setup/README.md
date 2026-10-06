@@ -53,3 +53,5 @@ The page detects protocol 2 and requires the matching public firmware.
 [MiniMax native API](https://platform.minimax.io/docs/api-reference/speech-t2a-http).
 MiniMax payload/response contract tests pass; actual paid synthesis has not been
 verified without an authorized MiniMax key.
+
+The same self-contained page provides English and Chinese UI, browser-language defaults and an explicit EN/中文 switch. Language changes preserve form values and connection state; no locale preference is written to browser storage.

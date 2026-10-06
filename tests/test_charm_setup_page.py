@@ -10,7 +10,7 @@ class SetupPageTest(unittest.TestCase):
         harness=r'''
 const vm=require('node:vm'),assert=require('node:assert/strict');
 const elements={};
-const document={getElementById(id){return elements[id]??={value:'',textContent:'',dataset:{},disabled:false};}};
+const document={documentElement:{},querySelectorAll(){return [];},querySelector(){return null;},getElementById(id){return elements[id]??={value:'',textContent:'',dataset:{},disabled:false};}};
 let commands=[],waiter=null,chunks=[],failTTS=false,sdkConfigured=false,ttsConfigured=false,closed=0;
 function push(text){const bytes=new TextEncoder().encode(text);for(const part of [bytes.slice(0,7),bytes.slice(7)]){if(waiter){const w=waiter;waiter=null;w({value:part,done:false});}else chunks.push(part);}}
 const reader={read(){return chunks.length?Promise.resolve({value:chunks.shift(),done:false}):new Promise(r=>waiter=r);},cancel(){if(waiter){waiter({done:true});waiter=null;}return Promise.resolve();},releaseLock(){}};
@@ -20,7 +20,7 @@ const port={async open(){},async setSignals(){},async close(){closed++;},readabl
  else if(command.startsWith('>tts.setup=')){ttsConfigured=!failTTS;push('@tts '+JSON.stringify({configured:!failTTS})+'\n');}
  else if(command==='>setup.restart')push('@setup {"ok":true,"restarting":true}\n');
  }}}}};
-const context={document,navigator:{serial:{requestPort:async()=>port}},window:{isSecureContext:true},TextEncoder,TextDecoder,setTimeout,clearTimeout,console};
+const context={document,navigator:{language:"zh-CN",serial:{requestPort:async()=>port}},window:{isSecureContext:true},TextEncoder,TextDecoder,setTimeout,clearTimeout,console};
 vm.createContext(context);
 '''
         tests=r'''
@@ -44,7 +44,9 @@ vm.createContext(context);
  assert.equal(commands.filter(x=>x.startsWith('>sdk.setup=')).length,before);
  assert(commands.some(x=>x.includes('minimax-global')));assert(commands.includes('>setup.restart'));assert(elements.save.disabled);
  assert.equal(elements.tts.value,'');assert(!Object.values(elements).some(e=>e.textContent.includes('synthetic')));
- console.log('USB page workflow passed');
+ elements.language.onclick();assert.equal(document.documentElement.lang,'en');assert.match(elements.message.textContent,/restarting/);
+ elements.language.onclick();assert.equal(document.documentElement.lang,'zh-CN');
+ console.log('USB page workflow and language switch passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
 '''
         with tempfile.TemporaryDirectory() as tmp:

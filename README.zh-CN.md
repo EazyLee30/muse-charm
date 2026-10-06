@@ -101,7 +101,7 @@ format: MP3 / 16000 Hz
 
 ## 🚀 懒人包：不用编译，刷完填写 token
 
-**在线配置：[eazylee.xyz/muse-charm](https://eazylee.xyz/muse-charm/)**。电脑 Chrome/Edge 通过 USB 配置，凭证只发给板子。
+**在线配置：[eazylee.xyz/muse-charm](https://eazylee.xyz/muse-charm/)**。电脑 Chrome/Edge 通过 USB 配置，凭证只发给板子。页面支持中英文切换，包含操作说明、服务选项和连接/保存提示。
 
 ![USB configuration page](docs/charm-setup.png)
 
