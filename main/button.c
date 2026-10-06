@@ -42,6 +42,26 @@ void button_set_press_cb(button_press_cb cb) {
 }
 #endif
 
+#if CONFIG_HOMEHUB_VOICE && CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+#define VOICE_KEY_GPIO 18
+// Use the separate KEY for voice; BOOT always retains its setup/reset role.
+static void voice_key_poll(void) {
+    static bool was_pressed;
+    static bool claimed;
+    bool pressed = gpio_get_level(VOICE_KEY_GPIO) == 0;
+    button_press_cb cb = s_press_cb;
+    if (pressed && !was_pressed) {
+        claimed = cb && cb(true);
+        ESP_LOGI(TAG, "KEY pressed: voice %s", claimed ? "accepted" : "not ready");
+    } else if (!pressed && was_pressed && claimed) {
+        claimed = false;
+        if (cb) cb(false);
+        ESP_LOGI(TAG, "KEY released");
+    }
+    was_pressed = pressed;
+}
+#endif
+
 static void button_task(void *arg) {
     stack_monitor_t stack = STACK_MONITOR_INIT;
     bool was_pressed = false;
@@ -49,17 +69,20 @@ static void button_task(void *arg) {
     bool fired = false;
     int click_count = 0;
     int64_t last_release = 0;
-#if CONFIG_HOMEHUB_VOICE
+#if CONFIG_HOMEHUB_VOICE && !CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
     bool claimed = false;
 #endif
 
     while (1) {
+#if CONFIG_HOMEHUB_VOICE && CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+        voice_key_poll();
+#endif
         bool pressed = (gpio_get_level(BTN_GPIO) == 0);
 
         if (pressed && !was_pressed) {
             press_start = esp_timer_get_time();
             fired = false;
-#if CONFIG_HOMEHUB_VOICE
+#if CONFIG_HOMEHUB_VOICE && !CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
             button_press_cb press_cb = s_press_cb;
             claimed = press_cb && press_cb(true);
             if (claimed) {
@@ -115,7 +138,11 @@ bool button_init(button_cb on_short_press, button_cb on_double_press,
     s_long_press_cb = on_long_press;
 
     gpio_config_t cfg = {
-        .pin_bit_mask = (1ULL << BTN_GPIO),
+        .pin_bit_mask = (1ULL << BTN_GPIO)
+#if CONFIG_HOMEHUB_VOICE && CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+                      | (1ULL << VOICE_KEY_GPIO)
+#endif
+                      ,
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
