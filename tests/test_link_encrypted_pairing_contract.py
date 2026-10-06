@@ -158,7 +158,9 @@ class LinkEncryptedPairingContractTest(unittest.TestCase):
             provision_v2_block.index("link_pairing_mark_provisioning_active()"),
             provision_v2_block.index("xTaskCreate(provision_task"),
         )
-        self.assertIn('!= pdPASS', provision_v2_block)
+        self.assertIn('== pdPASS', provision_v2_block)
+        self.assertIn('if (!task_started)', provision_v2_block)
+        self.assertIn('provision worker unavailable:', provision_v2_block)
         self.assertIn("secure_free_str(a->password)", provision_v2_block)
         self.assertIn("secure_free_str(a->access_token)", provision_v2_block)
         self.assertIn("secure_free_str(a->refresh_token)", provision_v2_block)

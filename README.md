@@ -21,8 +21,9 @@ Talk to Muse through a reflective monochrome LCD. No backlight, no glare — jus
 
 ## ✨ Features
 
-- 🎙️ **Push-to-talk voice** — Hold KEY, speak, release. Muse transcribes and replies through the speaker.
+- 🎙️ **Push-to-talk voice** — Hold KEY, speak, release. The official session transcribes and returns text replies over USB.
 - 🖥️ **ST7305 reflective LCD** — 300×400 monochrome, sunlight-readable, ultra-low power.
+- 🐾 **Animated Muse avatar** — Official pixel renderer at 5 FPS, with idle, listening, thinking and reply animations.
 - 🌗 **Dark / Light modes** — Pure black background or paper white, designed for reflective displays.
 - 🔊 **ES8311 + ES7210** — Speaker DAC and dual-microphone array via I²S.
 - 🔋 **Low power** — Reflective display sips power; no backlight to drain the battery.
@@ -118,9 +119,20 @@ python -m esptool --chip esp32s3 merge-bin \
 3. Select `MuseGadget-Disp-XXXXXX` from the list.
 4. When prompted, **short-press the BOOT button** to confirm.
 5. Choose your 2.4GHz Wi-Fi network (ESP32-S3 is 2.4GHz only).
-6. Done! **Hold KEY** to talk, release to hear Muse reply.
+6. The gadget restarts after pairing. **Hold KEY** to talk; USB chat provides text replies.
 
 > 💡 **Factory reset:** Hold BOOT for 5 seconds to wipe Wi-Fi and pairing data.
+
+## 💻 Talk to your computer's Muse
+
+After phone provisioning succeeds, the gadget restarts to release BLE memory and connects to the paired account's Muse VM. Use the same account and VM to continue the conversation in desktop Muse.
+
+```bash
+python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 --status
+python3 tools/muse/chat.py --port /dev/cu.usbmodem1101 "Hello, please reply briefly"
+```
+
+USB text replies use the official SDK console protocol. The upstream session currently paces text with silence; spoken replies require a separate TTS integration. The reflective display shows the animated avatar and status, rather than full chat text. Keep personal SDK credentials and built firmware out of public repositories.
 
 ## 🧠 How It Works
 
@@ -135,7 +147,7 @@ python -m esptool --chip esp32s3 merge-bin \
 1. **Pairing** — Phone connects via BLE, confirms with physical button press.
 2. **Provisioning** — Wi-Fi credentials sent over encrypted BLE.
 3. **Voice link** — Device opens a Noise-encrypted WebSocket to Muse's VM.
-4. **Push-to-talk** — KEY down → record → KEY up → transcribe → Muse replies → speaker plays.
+4. **Push-to-talk** — KEY down → record → KEY up → transcribe → Muse returns a text reply.
 
 ## 📁 Project Structure
 

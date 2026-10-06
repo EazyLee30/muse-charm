@@ -66,6 +66,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "pixel_font.h"
+#include "muse_pixel.h"
 #include "stack_monitor.h"
 
 static const char *TAG = "link.led";
@@ -259,86 +260,44 @@ static void fb_text_centered(const char *t, int y, int scale) {
     fb_text(t, (RLCD_W - text_width(t, scale)) / 2, y, scale);
 }
 
-// ---- Charm mascot (original fluffy blob, pixel-art) ---------------------------
-// A cute fluffy round creature: jagged fur edge, dot eyes, small smile.
-// Expressions change with the voice state. Centered at (cx, cy), ~110px wide.
-
-typedef enum {
-    CHARM_HAPPY,      // idle / ready: smile
-    CHARM_LISTENING,  // big attentive eyes
-    CHARM_THINKING,   // eyes looking up
-    CHARM_SPEAKING,   // open mouth
-    CHARM_SAD,        // error: frown
-} charm_expr_t;
-
-static void draw_charm(int cx, int cy, charm_expr_t expr) {
-    const int R = 52;
-    // Fluffy body: filled circle + fur spikes around the edge.
-    fb_circle(cx, cy, R, true);
-    for (int a = 0; a < 360; a += 12) {
-        double rad = a * 3.141592653589793 / 180.0;
-        int sx = (int)(cx + (R - 2) * cos(rad));
-        int sy = (int)(cy + (R - 2) * sin(rad));
-        int ex = (int)(cx + (R + 10) * cos(rad));
-        int ey = (int)(cy + (R + 10) * sin(rad));
-        // spike: small thick line from edge outward
-        for (int t = 0; t <= 6; t++) {
-            int px = sx + (ex - sx) * t / 6;
-            int py = sy + (ey - sy) * t / 6;
-            fb_rect(px - 2, py - 2, 5, 5, true);
+// ---- Official Muse avatar, adapted to the reflective monochrome panel ----
+// Reuse the SDK's procedural renderer and state/level animation. Ordered
+// dithering gives the colour fur shades texture without grayscale hardware.
+#define AVATAR_SIZE 176
+#define FRAME_MS 200
+static void draw_muse(led_state_t state, led_voice_t voice, int level_q) {
+    muse_mode_t mode = MUSE_MODE_IDLE;
+    if (state == LED_STATE_BOOT) mode = MUSE_MODE_BOOT;
+    if (state == LED_STATE_ERROR || voice == LED_VOICE_ERROR) mode = MUSE_MODE_ERROR;
+    else if (voice == LED_VOICE_LISTENING) mode = MUSE_MODE_LISTENING;
+    else if (voice == LED_VOICE_THINKING || voice == LED_VOICE_TRANSCRIBING) mode = MUSE_MODE_THINKING;
+    else if (voice == LED_VOICE_SPEAKING || voice == LED_VOICE_BUFFERING) mode = MUSE_MODE_SPEAKING;
+    static muse_mode_t last = MUSE_MODE_COUNT;
+    static int64_t changed_at;
+    int64_t now = esp_timer_get_time();
+    if (mode != last) { last = mode; changed_at = now; }
+    muse_pose_t pose = {
+        .mode = mode, .t = now / 1000000.0f,
+        .mode_t = (now - changed_at) / 1000000.0f,
+        .level = level_q / (float)LEVEL_STEPS,
+    };
+    muse_pixel_set_size(AVATAR_SIZE);
+    muse_pixel_render(&pose);
+    static const uint8_t bayer[4][4] = {
+        {0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5},
+    };
+    uint16_t row[AVATAR_SIZE];
+    for (int y = 0; y < AVATAR_SIZE; y++) {
+        muse_pixel_scale(row, AVATAR_SIZE, 0, AVATAR_SIZE - 1, y, y);
+        for (int x = 0; x < AVATAR_SIZE; x++) {
+            uint16_t c = row[x];
+            unsigned r = ((c >> 11) & 31) * 255 / 31;
+            unsigned g = ((c >> 5) & 63) * 255 / 63;
+            unsigned b = (c & 31) * 255 / 31;
+            unsigned lum = (77 * r + 150 * g + 29 * b) >> 8;
+            fb_px((RLCD_W - AVATAR_SIZE) / 2 + x, 108 + y,
+                  lum > (unsigned)bayer[y & 3][x & 3] * 16 + 8);
         }
-    }
-    // Belly: white patch to suggest fluff shading.
-    fb_circle(cx, cy + 18, 30, false);
-    // Eyes.
-    int eye_y = cy - 8;
-    int eye_dx = 20;
-    int eye_r = (expr == CHARM_LISTENING) ? 9 : 7;
-    if (expr == CHARM_THINKING) eye_y -= 6;
-    if (expr == CHARM_SAD) {
-        // X eyes for error
-        for (int i = -6; i <= 6; i++) {
-            fb_px(cx - eye_dx + i, eye_y + i, true);
-            fb_px(cx - eye_dx + i, eye_y - i, true);
-            fb_px(cx + eye_dx + i, eye_y + i, true);
-            fb_px(cx + eye_dx + i, eye_y - i, true);
-        }
-    } else {
-        fb_circle(cx - eye_dx, eye_y, eye_r, true);
-        fb_circle(cx + eye_dx, eye_y, eye_r, true);
-        // eye highlights (white dots)
-        fb_circle(cx - eye_dx + 2, eye_y - 2, 2, false);
-        fb_circle(cx + eye_dx + 2, eye_y - 2, 2, false);
-    }
-    // Mouth.
-    int my = cy + 16;
-    switch (expr) {
-        case CHARM_HAPPY:
-        case CHARM_LISTENING:
-            // smile: arc
-            for (int i = -12; i <= 12; i++) {
-                int yy = my + (i * i) / 24;
-                fb_rect(cx + i - 1, yy, 3, 3, true);
-            }
-            break;
-        case CHARM_THINKING:
-            // small flat line, slightly off-center
-            fb_rect(cx - 8, my + 2, 16, 4, true);
-            break;
-        case CHARM_SPEAKING:
-            // open oval mouth
-            for (int yy = -8; yy <= 8; yy++) {
-                int w = (int)(10 * sqrt(1.0 - (double)(yy * yy) / 64.0));
-                fb_hline(cx - w, my + yy, 2 * w + 1, true);
-            }
-            break;
-        case CHARM_SAD:
-            // frown: inverted arc
-            for (int i = -12; i <= 12; i++) {
-                int yy = my + 8 - (i * i) / 24;
-                fb_rect(cx + i - 1, yy, 3, 3, true);
-            }
-            break;
     }
 }
 
@@ -358,8 +317,8 @@ static void draw_mic(void) {
 
 static void draw_level(int q) {
     for (int i = 0; i < LEVEL_STEPS; i++) {
-        int h = i < q ? 36 : 6;
-        fb_rect(150 + i * 10, 246 - h, 8, h, true);
+        int h = i < q ? 12 : 3;
+        fb_rect(150 + i * 10, 298 - h, 8, h, true);
     }
 }
 
@@ -433,24 +392,14 @@ static const char *voice_label(led_voice_t v) {
 // Caller holds s_lock.
 static void render_status(const char *title, led_state_t state, led_voice_t voice, int level_q) {
     memset(s_fb, 0x00, RLCD_FB_BYTES);  // white paper
-    if (title[0]) fb_text_centered(title, 20, 3);
+        const char *name = title[0] ? title : "Muse";
+    int scale = text_width(name, 3) <= RLCD_W - 48 ? 3 :
+                text_width(name, 2) <= RLCD_W - 48 ? 2 : 1;
+    fb_text_centered(name, 20, scale);
     fb_rect(24, 60, RLCD_W - 48, 2, true);
     const char *vl = voice_label(voice);
     fb_text_centered(vl ? vl : conn_label(state), 80, 2);
-    // Charm mascot with expression per state, centered on screen.
-    charm_expr_t expr = CHARM_HAPPY;
-    switch (voice) {
-        case LED_VOICE_LISTENING:   expr = CHARM_LISTENING; break;
-        case LED_VOICE_THINKING:
-        case LED_VOICE_TRANSCRIBING: expr = CHARM_THINKING; break;
-        case LED_VOICE_SPEAKING:
-        case LED_VOICE_BUFFERING:   expr = CHARM_SPEAKING; break;
-        case LED_VOICE_ERROR:       expr = CHARM_SAD; break;
-        case LED_VOICE_IDLE:        break;
-    }
-    if (state == LED_STATE_ERROR) expr = CHARM_SAD;
-    draw_charm(RLCD_W / 2, 195, expr);
-    // Mic level meter while listening, below the charm.
+    draw_muse(state, voice, level_q);
     if (voice == LED_VOICE_LISTENING) draw_level(level_q);
 }
 
@@ -530,9 +479,10 @@ static void rlcd_task(void *arg) {
         xSemaphoreTake(s_mutex, portMAX_DELAY);
         int64_t until = s_volume_until;
         xSemaphoreGive(s_mutex);
-        TickType_t wait = portMAX_DELAY;
+        TickType_t wait = pdMS_TO_TICKS(FRAME_MS);
         int64_t now = esp_timer_get_time();
-        if (until > now) wait = pdMS_TO_TICKS((uint32_t)((until - now) / 1000) + 5);
+        if (until > now && until - now < FRAME_MS * 1000LL)
+            wait = pdMS_TO_TICKS((uint32_t)((until - now) / 1000) + 5);
         ulTaskNotifyTake(pdTRUE, wait);
 
         xSemaphoreTake(s_panel_lock, portMAX_DELAY);

@@ -694,7 +694,7 @@ static void restart_task(void *arg) {
 // to hold BLE, Wi-Fi and a TLS handshake at once (the S3's esp-aes DMA buffers fail even
 // with PSRAM). Pairing ends once the credentials are saved, and the device
 // restarts to reach its VM with the BLE stack never started.
-#define PAIR_THEN_RESTART CONFIG_MUSE_ENABLED
+#define PAIR_THEN_RESTART (CONFIG_MUSE_ENABLED || CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305)
 
 static char *load_token_unlocked(const char *key) {
     char *buf = calloc(1, TOKEN_BUF_BYTES);
@@ -2633,6 +2633,10 @@ void app_run(void) {
 #endif
 #if CONFIG_HOMEHUB_VOICE
     voice_init();
+#if CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305
+    extern void rlcd42_console_start(void);
+    rlcd42_console_start();
+#endif
 #endif
 #if CONFIG_HOMEHUB_SENSECAP_SENSORS
     sensecap_sensors_init();

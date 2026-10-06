@@ -98,6 +98,9 @@ elseif(CONFIG_HOMEHUB_VOICE)
     # voice_muse_chat.c stands in for the Muse settings, Wi-Fi and Link hooks.
     list(APPEND srcs "muse_chat.c" "muse_account_api.c" "muse_chat_session.cpp" "muse_chat_text.c" "muse_text.c")
     list(APPEND embed "test_reply.mp3")
+    if(CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305)
+        list(APPEND srcs "../../avatar/muse_pixel.c" "muse_console.c")
+    endif()
 endif()
 
 set(muse_priv_requires

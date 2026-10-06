@@ -25,6 +25,7 @@
 #include <stdatomic.h>
 
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_err.h"
 #include "esp_bt.h"
 #include "esp_app_desc.h"
@@ -467,8 +468,14 @@ static void dispatch_command_ex(const uint8_t *data, size_t len, bool decrypted)
             // 8 KB stack — mbedtls 3.6 (IDF v6) needs significantly more
             // stack during TLS handshake than v5's 3.x (~2 KB more peak).
             a->session_generation = link_pairing_mark_provisioning_active();
-            if (a->session_generation == 0
-                || xTaskCreate(provision_task, "prov", 8192, a, 5, NULL) != pdPASS) {
+            bool session_active = a->session_generation != 0;
+            bool task_started = session_active
+                && xTaskCreate(provision_task, "prov", 8192, a, 5, NULL) == pdPASS;
+            if (!task_started) {
+                ESP_LOGE(TAG, "provision worker unavailable: session=%s internal_free=%u largest=%u stack=8192",
+                         session_active ? "active" : "expired",
+                         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
                 uint32_t generation = a->session_generation;
                 secure_free_str(a->ssid);
                 secure_free_str(a->password);

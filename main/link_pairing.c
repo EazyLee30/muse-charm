@@ -1055,7 +1055,7 @@ static char *status_plain_json(const char *status) {
         return NULL;
     }
     if (s_sdk_token && strcmp(status, "pairing_confirmed") == 0) {
-        ESP_LOGI(TAG, "pairing_confirmed carries SDK token %.12s", s_sdk_token);
+        ESP_LOGI(TAG, "pairing_confirmed includes configured SDK credential");
     }
     char *plain_json = cJSON_PrintUnformatted(plain);
     cJSON_Delete(plain);

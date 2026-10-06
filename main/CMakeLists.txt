@@ -73,7 +73,7 @@ if(CONFIG_HOMEHUB_LED_BACKEND_RETERMINAL_UC8179
    OR CONFIG_HOMEHUB_LED_BACKEND_RETERMINAL_SPECTRA6)
     list(APPEND GADGET_SRCS "epaper_status.c")
 elseif(CONFIG_HOMEHUB_LED_BACKEND_WAVESHARE_S3_RLCD42_ST7305)
-    list(APPEND GADGET_SRCS "rlcd42_status.c")
+    list(APPEND GADGET_SRCS "rlcd42_status.c" "rlcd42_console.c")
 else()
     list(APPEND GADGET_SRCS "led_status.c")
 endif()
