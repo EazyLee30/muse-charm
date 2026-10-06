@@ -136,7 +136,7 @@ USB text replies use the official SDK console protocol. The upstream session cur
 
 ## 🔊 Audio diagnostics
 
-On the USB serial console at 115200 baud, send `>audio.test` followed by Enter to play one second of 440/660 Hz tones through the normal player, ES8311 and amplifier. This tests playback without a TTS service. `@audio {"queued":false}` means the voice hardware is not ready or is busy. After a KEY recording, logs report microphone sample count, peak and RMS amplitude. Speaker I²S failures are logged explicitly. The DAC volume uses the ES8311's 0.5 dB scale, with 100% capped at unity gain.
+On the USB serial console at 115200 baud, send `>audio.test` followed by Enter to play one second of 440/660 Hz tones through the normal player, ES8311 and amplifier. This tests playback without a TTS service at a fixed 60% level and then restores the saved volume. `@audio {"queued":false}` means the voice hardware is not ready or is busy. After a KEY recording, logs report microphone sample count, peak and RMS amplitude. Speaker I²S failures are logged explicitly. The DAC volume uses the ES8311's 0.5 dB scale, with 100% capped at unity gain.
 
 ## 🧠 How It Works
 

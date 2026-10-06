@@ -427,6 +427,15 @@ esp_err_t voice_board_speaker_write(const int32_t *frames, size_t count) {
 
 void voice_board_amp(bool on) {
     gpio_set_level(PIN_AMP_EN, on ? 1 : 0);
+    if (on && s_es8311) {
+        const uint8_t regs[] = {0x00,0x01,0x02,0x06,0x07,0x08,0x09,0x0B,0x0C,0x0D,0x10,0x11,0x12,0x13,0x31,0x32};
+        for (size_t i = 0; i < sizeof(regs); i++) {
+            uint8_t value = 0;
+            if (es8311_read(regs[i], &value) == ESP_OK)
+                ESP_LOGI(TAG, "DAC reg %02x=%02x", regs[i], value);
+        }
+        ESP_LOGI(TAG, "amplifier GPIO%d=%d", PIN_AMP_EN, gpio_get_level(PIN_AMP_EN));
+    }
 }
 
 bool voice_board_muted(void) {
@@ -443,7 +452,7 @@ esp_err_t voice_board_init(void) {
 
     gpio_config_t amp_cfg = {
         .pin_bit_mask = 1ULL << PIN_AMP_EN,
-        .mode = GPIO_MODE_OUTPUT,
+        .mode = GPIO_MODE_INPUT_OUTPUT,
     };
     esp_err_t err = gpio_config(&amp_cfg);
     if (err != ESP_OK) return err;

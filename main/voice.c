@@ -247,6 +247,7 @@ static bool on_press(bool pressed) {
 
 // Test the same player, DAC and amplifier path used by replies, without a network.
 static void speaker_test(void) {
+    voice_board_set_volume(60); // known test level, independent of saved mute/volume
     int16_t pcm[CAPTURE_CHUNK];
     voice_player_begin();
     esp_err_t err = ESP_OK;
@@ -265,6 +266,7 @@ static void speaker_test(void) {
     bool drained = voice_player_wait(5000);
     if (err != ESP_OK || !drained) voice_player_stop();
     ESP_LOGI(TAG, "speaker test: write=%s drained=%s", esp_err_to_name(err), drained ? "yes" : "no");
+    voice_board_set_volume(atomic_load(&s_volume));
     atomic_store(&s_audio_owner, 0);
 }
 
