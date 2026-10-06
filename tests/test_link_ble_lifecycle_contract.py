@@ -151,7 +151,7 @@ class LinkBleLifecycleContractTest(unittest.TestCase):
         self.assertLess(finished.index("link_pairing_arm_confirmation(session_generation)"),
                         finished.index("LED_STATE_PAIRING_CONFIRM_REQUIRED"))
         self.assertIn("link_pairing_provisioning_session_valid(0)", confirmed)
-        self.assertIn("LED_STATE_WIFI_CONNECTING", confirmed)
+        self.assertIn("LED_STATE_WAITING_FOR_WIFI", confirmed)
         self.assertLess(disconnected.index("led_status_set_state("),
                         disconnected.index("setup_window_lock_give()"))
         self.assertLess(disconnected.index("setup_window_lock_give()"),

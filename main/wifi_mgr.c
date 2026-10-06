@@ -116,6 +116,24 @@ static void schedule_reconnect(void) {
     }
 }
 
+// A scan result is only a hint. A missing pinned AP must not prevent the
+// same SSID from reconnecting through a replacement router or mesh node.
+static bool release_missing_bssid(uint8_t reason) {
+    if (reason != WIFI_REASON_NO_AP_FOUND) return false;
+    wifi_config_t wc;
+    if (esp_wifi_get_config(WIFI_IF_STA, &wc) != ESP_OK || !wc.sta.bssid_set) {
+        return false;
+    }
+    wc.sta.bssid_set = false;
+    memset(wc.sta.bssid, 0, sizeof(wc.sta.bssid));
+    wc.sta.channel = 0;
+    wc.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wc.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    if (esp_wifi_set_config(WIFI_IF_STA, &wc) != ESP_OK) return false;
+    ESP_LOGI(TAG, "cached AP missing; scanning all APs for the same SSID");
+    return true;
+}
+
 #if CONFIG_MUSE_ENABLED
 // A saved channel only says where the last AP was: on a mesh, the node found
 // there can be a room too far, and a join to it limps along at -80 dBm. The
@@ -160,15 +178,14 @@ static void event_handler(void *arg, esp_event_base_t base,
 
         xEventGroupClearBits(s_events, BIT_CONNECTED | BIT_GOT_IP);
         atomic_store(&s_sta_idle, true);
-        const wifi_event_sta_disconnected_t *event =
-            (const wifi_event_sta_disconnected_t *)data;
-        ESP_LOGW(TAG, "disconnected reason=%u", event ? event->reason : 0u);
-
-        bool floor_dropped = event && drop_rssi_floor(event->reason);
+        bool bssid_released = ev && (s_connecting || s_keep_connected)
+                              && release_missing_bssid(ev->reason);
+        bool floor_dropped = ev && (s_connecting || s_keep_connected)
+                             && drop_rssi_floor(ev->reason);
         if (s_connecting) {
             // Initial connect: retry up to MAX_INITIAL_RETRY, then fail.
-            // Dropping the RSSI floor starts a fresh scan, not a retry.
-            if (floor_dropped) {
+            // Releasing a stale AP or RSSI floor starts a fresh scan, not a retry.
+            if (bssid_released || floor_dropped) {
                 atomic_store(&s_sta_idle, false);
                 esp_wifi_connect();
             } else if (s_retry < MAX_INITIAL_RETRY) {

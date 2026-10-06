@@ -16,7 +16,7 @@
 # Build, flash or monitor one of the bench boards, each in its own build-<board>
 # directory with its own sdkconfig.
 #
-# Usage: board.sh BOARD [build|flash|monitor|flash-monitor] [PORT]
+# Usage: board.sh BOARD [build|menuconfig|flash|monitor|flash-monitor] [PORT]
 #
 #   devkit     ESP32-C5 DevKitC-1 (status LED, no display)
 #   ideaspark  ideaspark ESP32 with a 1.9 inch ST7789 display
@@ -107,6 +107,7 @@ esac
 
 case "$ACTION" in
   build)         IDF_ACTIONS=(build) ;;
+  menuconfig)    IDF_ACTIONS=(menuconfig) ;;
   flash)         IDF_ACTIONS=(flash) ;;
   monitor)       IDF_ACTIONS=(monitor) ;;
   flash-monitor) IDF_ACTIONS=(flash monitor) ;;
@@ -126,7 +127,7 @@ if ! command -v idf.py >/dev/null 2>&1; then
 fi
 
 PORT_ARGS=()
-if [ "$ACTION" != build ]; then
+if [ "$ACTION" != build ] && [ "$ACTION" != menuconfig ]; then
   if [ -z "$PORT" ]; then
     # shellcheck disable=SC2086
     FOUND=($(ls $PORTS 2>/dev/null || true))

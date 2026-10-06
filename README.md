@@ -71,11 +71,11 @@ Talk to Muse through a reflective monochrome LCD. No backlight, no glare — jus
 # Set up ESP-IDF
 . $IDF_PATH/export.sh
 
-# Select this board
-tools/board.sh waveshare-s3-rlcd42
+# First build: generate a local OTA signing key (never commit or share it)
+espsecure generate-signing-key --version 2 dev_signing_key.pem
 
 # Set your SDK token (NEVER commit this!)
-idf.py menuconfig
+tools/board.sh waveshare-s3-rlcd42 menuconfig
 # → Gadget SDK Token → paste your mgst_ token
 
 # Build

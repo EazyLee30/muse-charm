@@ -476,10 +476,6 @@ static void render_volume(int percent) {
 // shows at panel (299 - y, x)), then write the full window.
 // Caller holds s_panel_lock and s_lock.
 static esp_err_t rlcd_flush(void) {
-#ifdef CONFIG_RLCD42_DARK_MODE
-    // Dark mode: invert framebuffer (drawn black-on-white -> white-on-black).
-    for (size_t i = 0; i < RLCD_FB_BYTES; i++) s_fb[i] ^= 0xFF;
-#endif
     for (int ru = 0; ru < RLCD_ROW_UNITS; ru++) {
         for (int cg = 0; cg < RLCD_COL_GROUPS; cg++) {
             uint8_t *out = s_tx + ((size_t)ru * RLCD_COL_GROUPS + cg) * 3;
@@ -495,7 +491,13 @@ static esp_err_t rlcd_flush(void) {
                     int odd = (row[fb_x_odd >> 3] >> (7 - (fb_x_odd & 7))) & 1;
                     v = (v << 2) | (unsigned)(even ? 2 : 0) | (unsigned)(odd ? 1 : 0);
                 }
+#ifdef CONFIG_RLCD42_DARK_MODE
+                // Invert only the transfer data; repeated image flushes and
+                // partial draws must preserve the canonical framebuffer.
+                out[b] = (uint8_t)(v ^ 0xFF);
+#else
                 out[b] = (uint8_t)v;
+#endif
             }
         }
     }

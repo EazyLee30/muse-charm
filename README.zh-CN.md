@@ -71,11 +71,11 @@
 # 设置 ESP-IDF 环境
 . $IDF_PATH/export.sh
 
-# 选择这块板子
-tools/board.sh waveshare-s3-rlcd42
+# 首次编译：生成本机 OTA 签名密钥（不要提交或分享）
+espsecure generate-signing-key --version 2 dev_signing_key.pem
 
 # 填入你的 SDK token（千万别提交到 git！）
-idf.py menuconfig
+tools/board.sh waveshare-s3-rlcd42 menuconfig
 # → Gadget SDK Token → 粘贴你的 mgst_ token
 
 # 编译
