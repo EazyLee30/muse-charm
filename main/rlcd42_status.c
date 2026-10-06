@@ -259,6 +259,89 @@ static void fb_text_centered(const char *t, int y, int scale) {
     fb_text(t, (RLCD_W - text_width(t, scale)) / 2, y, scale);
 }
 
+// ---- Charm mascot (original fluffy blob, pixel-art) ---------------------------
+// A cute fluffy round creature: jagged fur edge, dot eyes, small smile.
+// Expressions change with the voice state. Centered at (cx, cy), ~110px wide.
+
+typedef enum {
+    CHARM_HAPPY,      // idle / ready: smile
+    CHARM_LISTENING,  // big attentive eyes
+    CHARM_THINKING,   // eyes looking up
+    CHARM_SPEAKING,   // open mouth
+    CHARM_SAD,        // error: frown
+} charm_expr_t;
+
+static void draw_charm(int cx, int cy, charm_expr_t expr) {
+    const int R = 52;
+    // Fluffy body: filled circle + fur spikes around the edge.
+    fb_circle(cx, cy, R, true);
+    for (int a = 0; a < 360; a += 12) {
+        double rad = a * 3.141592653589793 / 180.0;
+        int sx = (int)(cx + (R - 2) * cos(rad));
+        int sy = (int)(cy + (R - 2) * sin(rad));
+        int ex = (int)(cx + (R + 10) * cos(rad));
+        int ey = (int)(cy + (R + 10) * sin(rad));
+        // spike: small thick line from edge outward
+        for (int t = 0; t <= 6; t++) {
+            int px = sx + (ex - sx) * t / 6;
+            int py = sy + (ey - sy) * t / 6;
+            fb_rect(px - 2, py - 2, 5, 5, true);
+        }
+    }
+    // Belly: white patch to suggest fluff shading.
+    fb_circle(cx, cy + 18, 30, false);
+    // Eyes.
+    int eye_y = cy - 8;
+    int eye_dx = 20;
+    int eye_r = (expr == CHARM_LISTENING) ? 9 : 7;
+    if (expr == CHARM_THINKING) eye_y -= 6;
+    if (expr == CHARM_SAD) {
+        // X eyes for error
+        for (int i = -6; i <= 6; i++) {
+            fb_px(cx - eye_dx + i, eye_y + i, true);
+            fb_px(cx - eye_dx + i, eye_y - i, true);
+            fb_px(cx + eye_dx + i, eye_y + i, true);
+            fb_px(cx + eye_dx + i, eye_y - i, true);
+        }
+    } else {
+        fb_circle(cx - eye_dx, eye_y, eye_r, true);
+        fb_circle(cx + eye_dx, eye_y, eye_r, true);
+        // eye highlights (white dots)
+        fb_circle(cx - eye_dx + 2, eye_y - 2, 2, false);
+        fb_circle(cx + eye_dx + 2, eye_y - 2, 2, false);
+    }
+    // Mouth.
+    int my = cy + 16;
+    switch (expr) {
+        case CHARM_HAPPY:
+        case CHARM_LISTENING:
+            // smile: arc
+            for (int i = -12; i <= 12; i++) {
+                int yy = my + (i * i) / 24;
+                fb_rect(cx + i - 1, yy, 3, 3, true);
+            }
+            break;
+        case CHARM_THINKING:
+            // small flat line, slightly off-center
+            fb_rect(cx - 8, my + 2, 16, 4, true);
+            break;
+        case CHARM_SPEAKING:
+            // open oval mouth
+            for (int yy = -8; yy <= 8; yy++) {
+                int w = (int)(10 * sqrt(1.0 - (double)(yy * yy) / 64.0));
+                fb_hline(cx - w, my + yy, 2 * w + 1, true);
+            }
+            break;
+        case CHARM_SAD:
+            // frown: inverted arc
+            for (int i = -12; i <= 12; i++) {
+                int yy = my + 8 - (i * i) / 24;
+                fb_rect(cx + i - 1, yy, 3, 3, true);
+            }
+            break;
+    }
+}
+
 // ---- Voice icons (original single-bit drawings) -------------------------------
 
 static void draw_mic(void) {
@@ -353,18 +436,21 @@ static void render_status(const char *title, led_state_t state, led_voice_t voic
     fb_rect(24, 60, RLCD_W - 48, 2, true);
     const char *vl = voice_label(voice);
     fb_text_centered(vl ? vl : conn_label(state), 80, 2);
+    // Charm mascot with expression per state, centered on screen.
+    charm_expr_t expr = CHARM_HAPPY;
     switch (voice) {
-        case LED_VOICE_LISTENING:
-            draw_mic();
-            draw_level(level_q);
-            break;
-        case LED_VOICE_SPEAKING:    draw_speaker(); break;
-        case LED_VOICE_TRANSCRIBING: draw_dots(); break;
-        case LED_VOICE_THINKING:    fb_text_centered("?", 141, 6); break;
-        case LED_VOICE_BUFFERING:   draw_arrow_down(); break;
-        case LED_VOICE_ERROR:       draw_x(); break;
+        case LED_VOICE_LISTENING:   expr = CHARM_LISTENING; break;
+        case LED_VOICE_THINKING:
+        case LED_VOICE_TRANSCRIBING: expr = CHARM_THINKING; break;
+        case LED_VOICE_SPEAKING:
+        case LED_VOICE_BUFFERING:   expr = CHARM_SPEAKING; break;
+        case LED_VOICE_ERROR:       expr = CHARM_SAD; break;
         case LED_VOICE_IDLE:        break;
     }
+    if (state == LED_STATE_ERROR) expr = CHARM_SAD;
+    draw_charm(RLCD_W / 2, 195, expr);
+    // Mic level meter while listening, below the charm.
+    if (voice == LED_VOICE_LISTENING) draw_level(level_q);
 }
 
 // Caller holds s_lock.
